@@ -1781,6 +1781,10 @@ module.exports = function mountCcRoutes(app, deps) {
       if (!want) return res.status(503).json({ ok: false, error: 'IVR key press address is not set up' });
       if (!calls.safeEqual(params.key, want)) return res.status(401).json({ ok: false, error: 'Wrong key' });
       const r = await require('./lib/ivrDb').recordKeypress(db, params);
+      // A confirm from the IVR puts the "confirmed" tag on the Shopify order at once (the 2-minute retry job in cron_jobs.js stays as the safety net), the same as a caller's confirm.
+      if (r.outcome === 'confirmed_order' && r.order_id && typeof syncConfirmedTag === 'function') {
+        dbOne('SELECT shopify_order_id FROM orders_master WHERE id = $1', [r.order_id]).then(o => o && o.shopify_order_id ? syncConfirmedTag(r.order_id, o.shopify_order_id) : null).catch(e => console.error('[Shopify] IVR syncConfirmedTag error:', e.message));
+      }
       // A press for a call the CRM did not place (for example the old IVR campaign that shares this flow) is passed on to the old receiver, so nothing is lost
       // while both run. Set IVR_FORWARD_URL in Railway to the old address, without the key (the same key is sent along).
       let forwarded = false;
@@ -1807,7 +1811,15 @@ module.exports = function mountCcRoutes(app, deps) {
     catch (err) { console.error('[WA] check failed:', err.message); res.status(500).json({ send: false, error: 'server_error' }); }
   });
   app.post('/api/wa/result', waAuth, async (req, res) => {
-    try { const r = await require('./lib/waBridge').result(db, req.body); res.status(r.status).json(r.body); }
+    try {
+      const r = await require('./lib/waBridge').result(db, req.body);
+      // A Confirm tap puts the "confirmed" tag on the Shopify order at once (the 2-minute retry job in cron_jobs.js stays as the safety net), the same as a caller's confirm.
+      if (r.body && r.body.applied === 'confirmed_order' && typeof syncConfirmedTag === 'function') {
+        dbOne('SELECT o.id, o.shopify_order_id FROM wa_messages m JOIN orders_master o ON o.id = m.order_id WHERE m.send_id = $1', [String((req.body || {}).send_id || '')])
+          .then(o => o && o.shopify_order_id ? syncConfirmedTag(o.id, o.shopify_order_id) : null).catch(e => console.error('[Shopify] WhatsApp syncConfirmedTag error:', e.message));
+      }
+      res.status(r.status).json(r.body);
+    }
     catch (err) { console.error('[WA] result failed:', err.message); res.status(500).json({ ok: false, error: 'server_error' }); }
   });
   app.post('/api/wa/health', waAuth, async (req, res) => {
