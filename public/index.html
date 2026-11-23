@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jaadu Diet — Command Center</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #050a18; --surface: #0d1425; --surface2: #131c33; --border: #1e2d4a;
+      --text: #e8edf5; --muted: #7a8ba8; --dim: #4a5a78;
+      --accent: #6366f1; --accent-glow: rgba(99,102,241,0.15);
+      --green: #10b981; --green-glow: rgba(16,185,129,0.12);
+      --red: #ef4444; --yellow: #f59e0b; --cyan: #06b6d4;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+
+    .bg-grid {
+      position: fixed; inset: 0; z-index: 0;
+      background-image: linear-gradient(rgba(99,102,241,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(99,102,241,0.03) 1px, transparent 1px);
+      background-size: 60px 60px;
+    }
+    .bg-glow {
+      position: fixed; top: -200px; left: 50%; transform: translateX(-50%); z-index: 0;
+      width: 800px; height: 600px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(99,102,241,0.08) 0%, transparent 70%);
+    }
+
+    .container { max-width: 960px; margin: 0 auto; padding: 80px 24px; position: relative; z-index: 1; }
+
+    .logo { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 12px; }
+    .logo-icon {
+      width: 48px; height: 48px; border-radius: 14px;
+      background: linear-gradient(135deg, var(--accent), #8b5cf6);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.4rem; box-shadow: 0 4px 20px rgba(99,102,241,0.3);
+    }
+    h1 { font-size: 2rem; font-weight: 800; letter-spacing: -0.5px; }
+    h1 span { background: linear-gradient(135deg, #818cf8, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .subtitle { text-align: center; color: var(--muted); font-size: 0.95rem; margin-bottom: 56px; font-weight: 400; }
+
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 48px; }
+
+    .card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+      padding: 32px 28px; text-decoration: none; color: var(--text);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); position: relative; overflow: hidden;
+    }
+    .card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: linear-gradient(90deg, var(--accent), #8b5cf6); opacity: 0; transition: opacity 0.3s;
+    }
+    .card:hover { border-color: rgba(99,102,241,0.4); transform: translateY(-6px); box-shadow: 0 20px 60px rgba(0,0,0,0.4), 0 0 40px var(--accent-glow); }
+    .card:hover::before { opacity: 1; }
+    .card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px; }
+    .card-icon {
+      width: 52px; height: 52px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;
+    }
+    .card-icon.purple { background: rgba(99,102,241,0.12); }
+    .card-icon.amber { background: rgba(245,158,11,0.12); }
+    .card-icon.teal { background: rgba(6,182,212,0.12); }
+    .card-badge {
+      padding: 4px 10px; border-radius: 8px; font-size: 0.65rem; font-weight: 700;
+      letter-spacing: 0.8px; text-transform: uppercase;
+    }
+    .card-badge.purple { background: rgba(99,102,241,0.12); color: #818cf8; }
+    .card-badge.amber { background: rgba(245,158,11,0.12); color: var(--yellow); }
+    .card-badge.teal { background: rgba(6,182,212,0.12); color: var(--cyan); }
+    .card h2 { font-size: 1.2rem; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.3px; }
+    .card p { color: var(--muted); font-size: 0.85rem; line-height: 1.6; }
+    .card-arrow {
+      margin-top: 20px; display: flex; align-items: center; gap: 6px;
+      color: var(--accent); font-size: 0.82rem; font-weight: 600;
+    }
+    .card:hover .card-arrow { gap: 10px; }
+    .card-arrow svg { transition: transform 0.3s; }
+    .card:hover .card-arrow svg { transform: translateX(4px); }
+
+    .status-panel {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+      padding: 24px 28px; display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 16px;
+    }
+    .status-left { display: flex; align-items: center; gap: 12px; }
+    .status-dot {
+      width: 10px; height: 10px; border-radius: 50%; background: var(--green);
+      box-shadow: 0 0 12px rgba(16,185,129,0.4); animation: pulse 2s infinite;
+    }
+    .status-dot.error { background: var(--red); box-shadow: 0 0 12px rgba(239,68,68,0.4); animation: none; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .status-label { font-size: 0.85rem; color: var(--muted); }
+    .status-label strong { color: var(--text); }
+    .status-meta { display: flex; gap: 24px; }
+    .status-meta .item { text-align: center; }
+    .status-meta .item .val { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+    .status-meta .item .lbl { font-size: 0.68rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+
+    @media (max-width: 600px) {
+      .cards { grid-template-columns: 1fr; }
+      h1 { font-size: 1.5rem; }
+      .status-panel { flex-direction: column; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <div class="bg-glow"></div>
+
+  <div class="container">
+    <div class="logo">
+      <div class="logo-icon">JD</div>
+      <h1>Jaadu <span>Diet</span></h1>
+    </div>
+    <p class="subtitle">Arjuna Tea — Order Command Center</p>
+
+    <div class="cards">
+      <a class="card" href="/aman-crm.html">
+        <div class="card-header">
+          <div class="card-icon purple">📞</div>
+          <span class="card-badge purple">5 Tabs</span>
+        </div>
+        <h2>Aman CRM</h2>
+        <p>In-house telecaller dashboard — Fresh Leads, Repeat Queue, NDR Recovery, Duplicate Review & Address Fix</p>
+        <div class="card-arrow">
+          Open Dashboard
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </div>
+      </a>
+
+      <a class="card" href="/cc-crm.html">
+        <div class="card-header">
+          <div class="card-icon amber">🏢</div>
+          <span class="card-badge amber">1 Tab</span>
+        </div>
+        <h2>Call Center CRM</h2>
+        <p>Outsourced call center queue — Fresh Leads with quick disposition controls for agents</p>
+        <div class="card-arrow">
+          Open Dashboard
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </div>
+      </a>
+
+      <a class="card" href="/admin.html">
+        <div class="card-header">
+          <div class="card-icon teal">📊</div>
+          <span class="card-badge teal">Admin</span>
+        </div>
+        <h2>Reports & Admin</h2>
+        <p>Daily reports, repeat customers, refunds, courier money, blacklist, pincodes, agent accounts (admin login required)</p>
+        <div class="card-arrow">
+          Open Admin
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </div>
+      </a>
+    </div>
+
+    <div class="status-panel" id="statusPanel">
+      <div class="status-left">
+        <div class="status-dot" id="statusDot"></div>
+        <span class="status-label" id="statusLabel">Checking systems...</span>
+      </div>
+      <div class="status-meta" id="statusMeta"></div>
+    </div>
+  </div>
+
+  <script>
+    async function checkHealth() {
+      try {
+        const [health, kpi] = await Promise.all([
+          fetch('/health').then(r => r.json()),
+          fetch('/api/kpi').then(r => r.json())
+        ]);
+        document.getElementById('statusDot').className = 'status-dot';
+        document.getElementById('statusLabel').innerHTML = '<strong>All Systems Operational</strong> — DB Connected';
+        document.getElementById('statusMeta').innerHTML = `
+          <div class="item"><div class="val">${kpi.today_orders||0}</div><div class="lbl">Today</div></div>
+          <div class="item"><div class="val">${kpi.pending_total||0}</div><div class="lbl">Pending</div></div>
+          <div class="item"><div class="val">${kpi.today_confirmed||0}</div><div class="lbl">Confirmed</div></div>
+          <div class="item"><div class="val">${kpi.active_ndr||0}</div><div class="lbl">NDR</div></div>
+        `;
+      } catch(e) {
+        document.getElementById('statusDot').className = 'status-dot error';
+        document.getElementById('statusLabel').innerHTML = '<strong>System Error</strong> — Check deployment';
+      }
+    }
+    checkHealth();
+    setInterval(checkHealth, 30000);
+  </script>
+</body>
+</html>

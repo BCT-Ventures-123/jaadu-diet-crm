@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — Jaadu Diet CRM</title>
+<style>
+  :root { --bg:var(--ds-bg); --surface:var(--ds-surface); --surface2:var(--ds-surface-2); --border:var(--ds-border); --text:var(--ds-text); --muted:var(--ds-muted); --dim:var(--ds-faint); --accent:var(--ds-warn-ink); --green:var(--ds-brand); --red:var(--ds-danger); --cyan:var(--ds-info); }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:Inter,system-ui,sans-serif; background:var(--bg); color:var(--text); }
+  .header { background:var(--surface); border-bottom:1px solid var(--border); padding:0 24px; height:56px; display:flex; align-items:center; justify-content:space-between; }
+  .header h1 { font-size:1rem; } .header h1 span { color:var(--accent); }
+  .hr { display:flex; gap:10px; align-items:center; font-size:0.75rem; color:var(--muted); }
+  a.lb, button.lb { color:var(--muted); background:none; border:1px solid var(--border); padding:6px 12px; border-radius:8px; font-size:0.75rem; cursor:pointer; text-decoration:none; font-family:inherit; }
+  .tabs { display:flex; background:var(--surface); border-bottom:1px solid var(--border); padding:0 24px; overflow-x:auto; }
+  .tab { padding:12px 18px; cursor:pointer; color:var(--muted); font-size:0.75rem; font-weight:600; border-bottom:2px solid transparent; white-space:nowrap; }
+  .tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+  .pane { display:none; padding:20px 24px; } .pane.active { display:block; }
+  .filters { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:16px; }
+  .filters label { display:block; font-size:0.75rem; text-transform:uppercase; letter-spacing:.5px; color:var(--dim); font-weight:700; margin-bottom:4px; }
+  input, select { background:var(--bg); border:1px solid var(--border); color:var(--text); padding:8px 12px; border-radius:9px; font-size:0.875rem; font-family:inherit; }
+  .btn { background:var(--accent); color:#000; border:none; padding:9px 16px; border-radius:9px; font-weight:700; font-size:0.75rem; cursor:pointer; font-family:inherit; text-decoration:none; display:inline-block; }
+  .btn.alt { background:var(--surface2); color:var(--text); border:1px solid var(--border); }
+  .btn.sm { padding:5px 10px; font-size:0.75rem; } .btn.red { background:var(--red); color:#fff; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; margin-bottom:18px; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px; }
+  .card .v { font-size:1.75rem; font-weight:800; } .card .l { font-size:0.75rem; text-transform:uppercase; letter-spacing:.6px; color:var(--dim); margin-top:4px; font-weight:700; }
+  .card .t { font-size:0.75rem; margin-top:6px; } .ok { color:var(--green); } .bad { color:var(--red); }
+  .tw { overflow:auto; border:1px solid var(--border); border-radius:12px; background:var(--surface); margin-bottom:18px; }
+  table { width:100%; border-collapse:collapse; font-size:0.75rem; }
+  th { background:var(--surface2); color:var(--dim); text-transform:uppercase; font-size:0.75rem; letter-spacing:.7px; padding:10px 12px; text-align:left; white-space:nowrap; }
+  td { padding:10px 12px; border-top:1px solid rgba(30,45,74,.6); white-space:nowrap; }
+  td.wrap { white-space:normal; min-width:200px; }
+  h3 { font-size:0.875rem; margin:6px 0 10px; color:var(--muted); }
+  .msg { padding:10px 14px; border-radius:10px; margin-bottom:14px; font-size:0.875rem; background:var(--surface2); border:1px solid var(--border); }
+  .msg code { color:var(--cyan); font-size:1rem; user-select:all; }
+  .muted { color:var(--muted); } .empty { padding:30px; text-align:center; color:var(--dim); }
+  .badge { padding:2px 8px; border-radius:7px; font-size:0.75rem; font-weight:700; background:var(--surface2); }
+  .loading-row { padding:40px; text-align:center; color:var(--muted); font-size:0.875rem; }
+  .loading-row .spin { display:inline-block; width:20px; height:20px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; vertical-align:middle; margin-right:10px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+</style>
+<link rel="stylesheet" href="/ds.css">
+</head>
+<body>
+<div class="header">
+  <h1><span>Jaadu Diet</span> Admin</h1>
+  <div class="hr"><span id="who"></span><a class="lb" href="/cc-crm.html">Call centre</a><a class="lb" href="/">Home</a><button class="lb" onclick="logout()">Log out</button></div>
+</div>
+<div class="tabs" id="tabs">
+  <div class="tab active" data-p="daily">Daily report</div>
+  <div class="tab" data-p="scoreboard">Scoreboard</div>
+  <div class="tab" data-p="funnel">Funnel & leads</div>
+  <div class="tab" data-p="channels">Channels</div>
+  <div class="tab" data-p="inc">Prepaid incentives</div>
+  <div class="tab" data-p="agents">Agents</div>
+  <div class="tab" data-p="dnc">Do-not-call</div>
+  <div class="tab" data-p="log">Call log</div>
+  <div class="tab" data-p="callyzer">Call tracking</div>
+  <div class="tab" data-p="reports">ROI</div>
+</div>
+
+<div class="pane active" id="p-daily"><div id="reportMount"></div></div>
+<div class="pane" id="p-scoreboard"><div id="scoreboardMount"></div></div>
+<div class="pane" id="p-funnel"><div id="funnelMount"></div></div>
+<div class="pane" id="p-channels"><div id="channelsMount"></div></div>
+<div class="pane" id="p-inc">
+  <div class="filters" id="f-inc"></div>
+  <div class="cards" id="i-cards"></div>
+  <h3>By agent</h3><div class="tw"><table id="i-sum"></table></div>
+  <h3>Each conversion</h3><div class="tw"><table id="i-rows"></table></div>
+</div>
+<div class="pane" id="p-agents">
+  <div id="a-msg"></div>
+  <div class="filters">
+    <div><label>Username</label><input id="a-user" placeholder="e.g. priya"></div>
+    <div><label>Display name</label><input id="a-name" placeholder="Priya S"></div>
+    <div><label>Role</label><select id="a-role"><option value="agent">Call-centre agent</option><option value="aman">Aman (Aman CRM + call centre)</option><option value="admin">Admin</option></select></div>
+    <div><label>Backup agent</label><select id="a-bk"><option value="0">No</option><option value="1">Yes</option></select></div>
+    <div><label>Password (blank = generate)</label><input id="a-pw" type="password" autocomplete="new-password"></div>
+    <button class="btn" onclick="createAgent()">Create agent</button>
+  </div>
+  <div class="tw"><table id="a-table"></table></div>
+</div>
+<div class="pane" id="p-dnc">
+  <div class="tw"><table id="n-table"></table></div>
+</div>
+<div class="pane" id="p-log">
+  <div class="filters" id="f-log"></div>
+  <div class="tw"><table id="l-table"></table></div>
+</div>
+<div class="pane" id="p-callyzer">
+  <div class="filters" id="f-cz">
+    <div><label>From</label><input type="date" id="cz-from"></div>
+    <div><label>To</label><input type="date" id="cz-to"></div>
+    <div><label>Agent</label><input id="cz-agent" placeholder="Employee name"></div>
+    <div><label>Phone</label><input id="cz-phone" placeholder="Customer phone"></div>
+    <div><label>Type</label><select id="cz-type"><option value="">All</option><option value="outgoing">Outgoing</option><option value="incoming">Incoming</option><option value="missed">Missed</option><option value="rejected">Rejected</option></select></div>
+    <button class="btn" onclick="czSearch()">Search</button>
+    <button class="btn alt" onclick="czSync()">Sync from Callyzer</button>
+    <button class="btn alt" onclick="czTest()">Test API</button>
+  </div>
+  <div class="cards" id="cz-cards"></div>
+  <div id="cz-sync-msg" style="margin-bottom:12px"></div>
+  <h3>Agent summary</h3><div class="tw"><table id="cz-agents"></table></div>
+  <h3>Call history</h3><div class="tw"><table id="cz-table"></table></div>
+  <div id="cz-pager" style="display:flex;gap:8px;justify-content:center;margin:12px 0"></div>
+</div>
+
+<div class="pane" id="p-reports">
+  <h3 style="margin-bottom:14px">ROI Report</h3>
+  <div class="filters">
+    <div><label>Month</label><select id="rpt-month" onchange="rptMonthChanged()"></select></div>
+    <div><label>From</label><select id="rpt-from"></select></div>
+    <div><label>To</label><select id="rpt-to"></select></div>
+    <button class="btn" onclick="downloadReport()">Download Excel</button>
+  </div>
+  <div id="rpt-msg" style="margin-bottom:14px"></div>
+
+  <h3 style="margin:20px 0 10px">Monthly Team Costs (₹)</h3>
+  <p style="font-size:0.75rem;color:var(--muted);margin-bottom:12px">Enter the monthly cost for each team. When you download a report, costs are pro-rated by the number of days selected.</p>
+  <div class="filters" style="margin-bottom:12px">
+    <div><label>Month</label><select id="cost-month"></select></div>
+    <div><label>CC Cost (₹)</label><input type="number" id="cost-cc" placeholder="e.g. 20000" min="0"></div>
+    <div><label>Aman Salary (₹)</label><input type="number" id="cost-aman-sal" placeholder="e.g. 15000" min="0"></div>
+    <button class="btn" onclick="saveCost()">Save</button>
+  </div>
+  <div id="cost-msg" style="margin-bottom:10px"></div>
+  <div class="tw"><table id="cost-table"></table></div>
+</div>
+
+<script>
+function $(i) { return document.getElementById(i); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function today() { return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); }
+function fmt(s) { return s ? new Date(s).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'; }
+
+async function api(path, body) {
+  var o = body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) };
+  var r = await fetch(path, o);
+  if (r.status === 401) { location.href = '/login.html?next=/admin.html'; throw new Error('login'); }
+  var d = await r.json().catch(function () { return {}; });
+  if (r.status === 403) { document.body.innerHTML = '<div class="empty">Admin access required. <a href="/login.html?next=/admin.html" style="color:var(--ds-warn-ink)">Sign in as admin</a></div>'; throw new Error('forbidden'); }
+  if (!r.ok) throw new Error(d.error || 'Error ' + r.status);
+  return d;
+}
+async function logout() { try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (e) {} location.href = '/login.html'; }
+
+var AGENTS = [];
+function filterBar(host, key, onGo, csvPath, excelPath) {
+  $(host).innerHTML =
+    '<div><label>From</label><input type="date" id="' + key + '-from" value="' + today() + '"></div>' +
+    '<div><label>To</label><input type="date" id="' + key + '-to" value="' + today() + '"></div>' +
+    '<div><label>Agent</label><select id="' + key + '-agent"><option value="">All agents</option>' +
+      AGENTS.map(function (a) { return '<option value="' + esc(a.display_name) + '">' + esc(a.display_name) + '</option>'; }).join('') + '</select></div>' +
+    '<button class="btn" id="' + key + '-go">Apply</button>' +
+    '<a class="btn alt" id="' + key + '-csv" href="#">Export CSV</a>' +
+    (excelPath ? '<a class="btn alt" id="' + key + '-xlsx" href="#" style="background:var(--green);color:#000;border-color:var(--green)">Download Excel</a>' : '');
+  function qs() { return 'from=' + $(key + '-from').value + '&to=' + $(key + '-to').value + '&agent=' + encodeURIComponent($(key + '-agent').value); }
+  $(key + '-go').onclick = function () { onGo(qs()); };
+  $(key + '-csv').onclick = function (e) { e.preventDefault(); location.href = csvPath + '?' + qs() + '&format=csv'; };
+  if (excelPath) $(key + '-xlsx').onclick = function (e) { e.preventDefault(); location.href = excelPath + '?' + qs(); };
+  return qs;
+}
+
+function loading(el, msg) { $(el).innerHTML = '<tbody><tr><td class="loading-row"><span class="spin"></span>' + (msg || 'Loading…') + '</td></tr></tbody>'; }
+
+function table(el, cols, rows, empty) {
+  if (!rows.length) { $(el).innerHTML = '<tbody><tr><td class="empty">' + (empty || 'No data for this selection') + '</td></tr></tbody>'; return; }
+  $(el).innerHTML = '<thead><tr>' + cols.map(function (c) { return '<th>' + esc(c[0]) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+    rows.map(function (r) { return '<tr>' + cols.map(function (c) { var v = c[1](r); return '<td' + (c[2] ? ' class="wrap"' : '') + '>' + (c[3] ? v : esc(v)) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody>';
+}
+
+// ---- daily report --------------------------------------------------------
+function pctCell(v, ok, label) { return v === null || v === undefined ? '—' : '<span class="' + (ok ? 'ok' : 'bad') + '">' + v + '%</span>'; }
+var REPORT_COLS = [
+  ['Attempts', function (r) { return r.total_attempts; }], ['Connected', function (r) { return r.connected_calls; }],
+  ['Confirmed', function (r) { return r.confirmed; }], ['Cancelled', function (r) { return r.cancelled; }], ['DNP', function (r) { return r.dnp; }],
+  ['Callbacks', function (r) { return r.callbacks; }], ['Addr fixes', function (r) { return r.address_fixes; }], ['Wrong no.', function (r) { return r.wrong_numbers; }],
+  ['Escalated', function (r) { return r.escalations; }], ['Prepaid conv.', function (r) { return r.prepaid_conversions; }],
+  ['Connectivity %', function (r) { return pctCell(r.connectivity_pct, r.connectivity_ok); }, 0, 1],
+  ['Cancelled %', function (r) { return pctCell(r.cancelled_pct, r.cancelled_ok); }, 0, 1],
+];
+async function loadDaily(q) {
+  $('d-funnel').innerHTML = '<div class="loading-row"><span class="spin"></span>Loading report…</div>';
+  $('d-tat').innerHTML = '';
+  loading('d-byagent'); loading('d-day');
+
+  function card(v, l, tip) { return '<div class="card"><div class="v">' + v + '</div><div class="l">' + l + '</div>' + (tip || '') + '</div>'; }
+
+  // Load order-based funnel — 8 key metrics
+  try {
+    var f = await api('/api/reports/lead-funnel?' + q);
+    $('d-funnel').innerHTML =
+      card('<b>' + f.total_orders + '</b>', 'Total Orders') +
+      card('<b>' + f.total_attempts + '</b>', 'Total Attempts') +
+      card('<b>' + f.total_connected + '</b>', 'Total Connected (' + f.connected_pct + '% of orders)') +
+      card('<span class="ok"><b>' + f.confirmed + '</b></span>', 'Total Confirmed (' + f.confirmed_pct + '%)') +
+      card('<span class="bad"><b>' + f.cancelled + '</b></span>', 'Total Cancelled (' + f.cancelled_pct + '%)') +
+      card('<b>' + f.not_attempted + '</b>', 'Not called yet (' + f.not_attempted_pct + '%)') +
+      card('<span style="color:var(--ds-danger)"><b>' + f.not_connected + '</b></span>', 'Not connected - called, never picked (' + f.not_connected_pct + '%)') +
+      card('<b>' + f.nc_2nd + '</b>', 'Not connected: 2nd attempt DONE') +
+      card('<b>' + f.nc_2nd_pending + '</b>', 'Not connected: 2nd attempt NOT done') +
+      card('<b>' + f.nc_3rd + '</b>', 'Not connected: 3rd attempt DONE') +
+      card('<b>' + f.nc_3rd_pending + '</b>', 'Not connected: 3rd attempt NOT done');
+
+    $('d-tat').innerHTML =
+      card('<b>' + f.tat_order_to_1st_connect_fmt + '</b>', 'Order → 1st Connect') +
+      card('<b>' + f.tat_1st_to_2nd_connect_fmt + '</b>', '1st → 2nd Connect') +
+      card('<b>' + f.tat_2nd_to_3rd_connect_fmt + '</b>', '2nd → 3rd Connect') +
+      card('<b>' + f.tat_order_to_decision_fmt + '</b>', 'Order → Confirmation');
+  } catch (e) { $('d-funnel').innerHTML = '<div class="msg bad">' + esc(e.message) + '</div>'; }
+
+  // Also load agent-daily for the by-agent and by-day tables
+  var d = await api('/api/reports/agent-daily?' + q);
+  table('d-byagent', [['Agent', function (r) { return r.agent_name; }]].concat(REPORT_COLS), d.by_agent);
+  table('d-day', [['Day', function (r) { return r.day; }]].concat(REPORT_COLS), d.by_day);
+}
+
+// ---- incentives ----------------------------------------------------------
+async function loadInc(q) {
+  $('i-cards').innerHTML = '<div class="loading-row"><span class="spin"></span>Loading incentives…</div>';
+  loading('i-sum'); loading('i-rows');
+  var d = await api('/api/reports/incentives?' + q);
+  var conv = d.summary.reduce(function (s, x) { return s + x.conversions; }, 0);
+  $('i-cards').innerHTML = '<div class="card"><div class="v">' + conv + '</div><div class="l">Paid conversions</div></div><div class="card"><div class="v">₹' + d.total_amount + '</div><div class="l">Total incentive</div></div>';
+  table('i-sum', [['Agent', function (r) { return r.agent_name; }], ['Conversions', function (r) { return r.conversions; }], ['Incentive (₹)', function (r) { return r.amount; }]], d.summary);
+  table('i-rows', [['Credited', function (r) { return fmt(r.credited_at); }], ['Agent', function (r) { return r.agent_name; }], ['Order', function (r) { return r.order_name; }],
+    ['Customer', function (r) { return r.customer_name; }], ['Link sent', function (r) { return fmt(r.link_sent_at); }], ['₹', function (r) { return r.amount; }], ['Payment', function (r) { return r.payment_id; }]], d.rows);
+}
+
+// ---- agents --------------------------------------------------------------
+function showPw(title, pw) { $('a-msg').innerHTML = '<div class="msg">' + esc(title) + (pw ? ' Password (shown once — share it securely): <code>' + esc(pw) + '</code>' : '') + '</div>'; }
+async function loadAgents() {
+  loading('a-table', 'Loading agents…');
+  AGENTS = await api('/api/admin/agents');
+  table('a-table', [['Username', function (a) { return a.username; }], ['Name', function (a) { return a.display_name; }],
+    ['Role', function (a) { return a.role + (a.is_backup ? ' (backup)' : ''); }],
+    ['Status', function (a) { return a.is_active ? '<span class="ok">Active</span>' : '<span class="bad">Disabled</span>'; }, 0, 1],
+    ['Last login', function (a) { return fmt(a.last_login_at); }],
+    ['', function (a) {
+      return '<button class="btn alt sm" onclick="resetPw(\'' + esc(a.id) + '\')">Reset password</button> ' +
+        (a.is_active ? '<button class="btn red sm" onclick="setActive(\'' + esc(a.id) + '\',0)">Disable</button>' : '<button class="btn sm" onclick="setActive(\'' + esc(a.id) + '\',1)">Enable</button>');
+    }, 0, 1]], AGENTS);
+}
+async function createAgent() {
+  try {
+    var d = await api('/api/admin/agents', { username: $('a-user').value, display_name: $('a-name').value, role: $('a-role').value, is_backup: $('a-bk').value === '1', password: $('a-pw').value });
+    showPw('Created ' + d.username + '.', d.password); $('a-user').value = $('a-name').value = $('a-pw').value = ''; loadAgents();
+  } catch (e) { if (e.message !== 'login') showPw('Error: ' + e.message); }
+}
+async function resetPw(id) {
+  if (!confirm('Reset this password and sign the agent out everywhere?')) return;
+  try { var d = await api('/api/admin/agents/' + id + '/reset-password', {}); showPw('Password reset.', d.password); } catch (e) { showPw('Error: ' + e.message); }
+}
+async function setActive(id, on) {
+  try { await api('/api/admin/agents/' + id + (on ? '/enable' : '/disable'), {}); showPw(on ? 'Agent enabled.' : 'Agent disabled and signed out.'); loadAgents(); } catch (e) { showPw('Error: ' + e.message); }
+}
+
+// ---- DNC -----------------------------------------------------------------
+async function loadDnc() {
+  loading('n-table', 'Loading DNC list…');
+  var rows = await api('/api/admin/dnc');
+  table('n-table', [['Order', function (r) { return r.order_name; }], ['Customer', function (r) { return r.customer_name; }], ['Phone', function (r) { return r.customer_phone; }],
+    ['Flagged by', function (r) { return r.dnc_by; }], ['When', function (r) { return fmt(r.dnc_at); }], ['Note', function (r) { return r.dnc_note || ''; }, 1],
+    ['', function (r) { return '<button class="btn alt sm" onclick="clearDnc(\'' + esc(r.id) + '\')">Return to queue</button>'; }, 0, 1]], rows, 'No leads are flagged Do Not Call');
+}
+async function clearDnc(id) {
+  if (!confirm('Remove the Do Not Call flag? The lead can be called again.')) return;
+  try { await api('/api/admin/dnc/' + id + '/clear', {}); loadDnc(); } catch (e) { alert(e.message); }
+}
+
+// ---- call log ------------------------------------------------------------
+async function loadLog(q) {
+  loading('l-table', 'Loading call log…');
+  var rows = await api('/api/reports/call-log?' + q);
+  table('l-table', [['Time', function (r) { return fmt(r.created_at); }], ['Agent', function (r) { return r.agent_name; }], ['Order', function (r) { return r.order_name; }],
+    ['Phone', function (r) { return r.customer_phone; }], ['Outcome', function (r) { return r.disposition; }], ['Reason', function (r) { return r.reason_code || ''; }],
+    ['Callback at', function (r) { return r.callback_at ? fmt(r.callback_at) : ''; }], ['Note', function (r) { return r.note || ''; }, 1]], rows);
+}
+
+// ---- callyzer call tracking ----------------------------------------------
+var czAllRows = [], czPage = 1, CZ_PER = 15;
+function fmtDur(s) { if (!s) return '0s'; var m = Math.floor(s / 60); return m ? m + 'm ' + (s % 60) + 's' : s + 's'; }
+function czTypeBadge(t) {
+  var tl = (t || '').toLowerCase();
+  var colors = { outgoing:'var(--ds-info)', incoming:'var(--ds-brand)', missed:'var(--ds-danger)', rejected:'var(--ds-warn-ink)' };
+  return '<span style="background:' + (colors[tl] || 'var(--ds-faint)') + ';color:#000;padding:2px 8px;border-radius:7px;font-size:0.75rem;font-weight:700">' + esc(t || 'unknown') + '</span>';
+}
+function czDate(r) {
+  var d = r.call_date ? String(r.call_date).split('T')[0] : '';
+  var t = r.call_time || '';
+  return d + (t ? ' ' + t : '');
+}
+function czRecording(r) {
+  var url = r.call_recording_url;
+  if (!url) return '<span style="color:var(--dim)">—</span>';
+  return '<audio controls preload="none" style="height:28px;max-width:180px"><source src="' + esc(url) + '"></audio>' +
+    ' <a href="' + esc(url) + '" target="_blank" style="color:var(--cyan);font-size:0.75rem">Open</a>';
+}
+function czRenderPage() {
+  var start = (czPage - 1) * CZ_PER, rows = czAllRows.slice(start, start + CZ_PER);
+  var total = czAllRows.length, pages = Math.ceil(total / CZ_PER);
+  table('cz-table', [
+    ['Date', function (r) { return czDate(r); }],
+    ['Employee', function (r) { return r.emp_name || '—'; }],
+    ['Customer', function (r) { return r.client_number; }],
+    ['Type', function (r) { return czTypeBadge(r.call_type); }, 0, 1],
+    ['Duration', function (r) { return fmtDur(r.call_duration); }],
+    ['Order', function (r) { return r.order_name || '—'; }],
+    ['Recording', function (r) { return czRecording(r); }, 0, 1]
+  ], rows, 'No calls found');
+  $('cz-pager').innerHTML = (czPage > 1 ? '<button class="btn alt sm" onclick="czPage--;czRenderPage()">← Previous</button>' : '') +
+    '<span style="color:var(--muted);font-size:0.75rem;line-height:28px">Page ' + czPage + ' / ' + (pages || 1) + ' (' + total + ' calls)</span>' +
+    (czPage < pages ? '<button class="btn alt sm" onclick="czPage++;czRenderPage()">Next →</button>' : '');
+}
+async function czSearch() {
+  loading('cz-table', 'Loading calls…');
+  $('cz-pager').innerHTML = '';
+  var q = [];
+  if ($('cz-from').value) q.push('from=' + $('cz-from').value);
+  if ($('cz-to').value) q.push('to=' + $('cz-to').value);
+  if ($('cz-agent').value) q.push('agent=' + encodeURIComponent($('cz-agent').value));
+  if ($('cz-phone').value) q.push('phone=' + encodeURIComponent($('cz-phone').value));
+  if ($('cz-type').value) q.push('type=' + $('cz-type').value);
+  czAllRows = await api('/api/admin/callyzer/calls?' + q.join('&'));
+  czPage = 1;
+  czRenderPage();
+}
+async function czLoadStats() {
+  var from = $('cz-from').value || today();
+  var to = $('cz-to').value || today();
+  try {
+    var d = await api('/api/admin/callyzer/stats?from=' + from + '&to=' + to);
+    var s = d.summary || {};
+    function card(v, l) { return '<div class="card"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>'; }
+    $('cz-cards').innerHTML =
+      card(s.total_calls || 0, 'Total calls') +
+      card(s.outgoing || 0, 'Outgoing') +
+      card(s.incoming || 0, 'Incoming') +
+      card('<span class="bad">' + (s.missed || 0) + '</span>', 'Missed') +
+      card(fmtDur(s.avg_connected_duration || 0), 'Avg duration') +
+      card(s.active_agents || 0, 'Active agents') +
+      card(s.unique_customers || 0, 'Unique customers');
+    table('cz-agents', [
+      ['Employee', function (r) { return r.emp_name; }],
+      ['Total', function (r) { return r.total; }],
+      ['Outgoing', function (r) { return r.outgoing; }],
+      ['Incoming', function (r) { return r.incoming; }],
+      ['Missed', function (r) { return '<span class="bad">' + r.missed + '</span>'; }, 0, 1],
+      ['Avg dur', function (r) { return fmtDur(r.avg_dur); }],
+      ['Total talk time', function (r) { return fmtDur(r.total_dur); }]
+    ], d.by_agent || [], 'No agent data');
+  } catch (e) { $('cz-cards').innerHTML = '<div class="msg">Stats: ' + esc(e.message) + '</div>'; }
+}
+async function czSync() {
+  var days = prompt('Sync how many days back?', '1');
+  if (!days) return;
+  $('cz-sync-msg').innerHTML = '<div class="msg"><span class="spin"></span> Syncing from Callyzer… (this may take a moment)</div>';
+  try {
+    var d = await api('/api/admin/callyzer/sync', { days: Number(days) });
+    $('cz-sync-msg').innerHTML = '<div class="msg ok">Synced! Fetched: ' + d.fetched + ', New: ' + d.new_calls + ', Matched to orders: ' + d.matched_to_orders + ' (' + d.date_range + ')</div>';
+    czSearch(); czLoadStats();
+  } catch (e) { $('cz-sync-msg').innerHTML = '<div class="msg bad">Sync error: ' + esc(e.message) + '</div>'; }
+}
+async function czTest() {
+  $('cz-sync-msg').innerHTML = '<div class="msg"><span class="spin"></span> Testing Callyzer API…</div>';
+  try {
+    var d = await api('/api/admin/callyzer/test');
+    if (d.success) {
+      $('cz-sync-msg').innerHTML = '<div class="msg ok">API connected! Status: ' + d.status + '</div>';
+    } else {
+      $('cz-sync-msg').innerHTML = '<div class="msg bad">API error — Status: ' + (d.status || 'N/A') + ', Error: ' + esc(JSON.stringify(d.error)) + '</div>';
+    }
+  } catch (e) { $('cz-sync-msg').innerHTML = '<div class="msg bad">Test failed: ' + esc(e.message) + '</div>'; }
+}
+var czLoaded = false;
+
+// ---- reports (Excel download + monthly costs) ----------------------------
+var rptLoaded = false;
+var MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+function buildMonthOptions(selectId, selectedYM) {
+  var el = $(selectId), now = new Date(), opts = '';
+  for (var i = 5; i >= 0; i--) {
+    var d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    var ym = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    var label = MONTH_NAMES[d.getMonth()] + ' ' + d.getFullYear();
+    opts += '<option value="' + ym + '"' + (ym === selectedYM ? ' selected' : '') + '>' + label + '</option>';
+  }
+  el.innerHTML = opts;
+}
+
+function buildDateOptions(selectId, year, month, selectedDay) {
+  var el = $(selectId), daysInMonth = new Date(year, month, 0).getDate(), opts = '';
+  for (var i = 1; i <= daysInMonth; i++) {
+    var val = year + '-' + String(month).padStart(2, '0') + '-' + String(i).padStart(2, '0');
+    var label = i + ' ' + MONTH_NAMES[month - 1].slice(0, 3) + ' ' + year;
+    opts += '<option value="' + val + '"' + (i === selectedDay ? ' selected' : '') + '>' + label + '</option>';
+  }
+  el.innerHTML = opts;
+}
+
+function rptMonthChanged() {
+  var ym = $('rpt-month').value;
+  var parts = ym.split('-'), y = Number(parts[0]), m = Number(parts[1]);
+  var daysInMonth = new Date(y, m, 0).getDate();
+  var todayD = new Date();
+  var todayDay = (todayD.getFullYear() === y && todayD.getMonth() + 1 === m) ? todayD.getDate() : daysInMonth;
+  buildDateOptions('rpt-from', y, m, 1);
+  buildDateOptions('rpt-to', y, m, todayDay);
+}
+
+async function loadCosts() {
+  loading('cost-table', 'Loading costs…');
+  var rows = await api('/api/admin/monthly-costs');
+  table('cost-table', [
+    ['Month', function (r) { return r.month_year; }],
+    ['CC Cost (₹)', function (r) { return Number(r.cc_cost).toLocaleString('en-IN'); }],
+    ['Aman Salary (₹)', function (r) { return Number(r.aman_salary).toLocaleString('en-IN'); }],
+    ['Updated', function (r) { return fmt(r.updated_at); }]
+  ], rows, 'No monthly costs entered yet');
+}
+async function saveCost() {
+  var m = $('cost-month').value, cc = $('cost-cc').value, sal = $('cost-aman-sal').value;
+  if (!m) { $('cost-msg').innerHTML = '<div class="msg bad">Select a month</div>'; return; }
+  try {
+    await api('/api/admin/monthly-costs', { month_year: m, cc_cost: Number(cc) || 0, aman_salary: Number(sal) || 0 });
+    $('cost-msg').innerHTML = '<div class="msg ok">Saved costs for ' + esc(m) + '</div>';
+    $('cost-cc').value = $('cost-aman-sal').value = '';
+    loadCosts();
+  } catch (e) { $('cost-msg').innerHTML = '<div class="msg bad">Error: ' + esc(e.message) + '</div>'; }
+}
+function downloadReport() {
+  var from = $('rpt-from').value, to = $('rpt-to').value;
+  if (!from || !to) { $('rpt-msg').innerHTML = '<div class="msg bad">Select both From and To dates</div>'; return; }
+  if (from > to) { $('rpt-msg').innerHTML = '<div class="msg bad">From date must be before To date</div>'; return; }
+  $('rpt-msg').innerHTML = '<div class="msg"><span class="spin"></span> Generating report…</div>';
+  var url = '/api/admin/report/download?from=' + from + '&to=' + to;
+  fetch(url).then(function (r) {
+    if (!r.ok) return r.text().then(function (t) { try { var d = JSON.parse(t); throw new Error(d.error || 'Error ' + r.status); } catch (e) { if (e instanceof SyntaxError) throw new Error('Error ' + r.status); throw e; } });
+    return r.blob();
+  }).then(function (blob) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'CRM_Report_' + from + '_to_' + to + '.xlsx';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    $('rpt-msg').innerHTML = '<div class="msg ok">Report downloaded!</div>';
+  }).catch(function (e) {
+    if (e.message === 'login') return;
+    $('rpt-msg').innerHTML = '<div class="msg bad">Error: ' + esc(e.message) + '</div>';
+  });
+}
+
+// ---- boot ----------------------------------------------------------------
+document.querySelectorAll('.tab').forEach(function (t) {
+  t.onclick = function () {
+    document.querySelectorAll('.tab').forEach(function (x) { x.classList.remove('active'); });
+    document.querySelectorAll('.pane').forEach(function (x) { x.classList.remove('active'); });
+    t.classList.add('active'); $('p-' + t.dataset.p).classList.add('active');
+    if (t.dataset.p === 'dnc') loadDnc().catch(function () {});
+    if (t.dataset.p === 'agents') loadAgents().catch(function () {});
+    if (t.dataset.p === 'callyzer' && !czLoaded) {
+      czLoaded = true;
+      $('cz-from').value = today(); $('cz-to').value = today();
+      czSearch().catch(function () {}); czLoadStats().catch(function () {});
+    }
+    if (t.dataset.p === 'reports' && !rptLoaded) {
+      rptLoaded = true;
+      var now = new Date();
+      var curYM = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+      buildMonthOptions('rpt-month', curYM);
+      buildMonthOptions('cost-month', curYM);
+      rptMonthChanged();
+      loadCosts().catch(function () {});
+    }
+  };
+});
+(async function () {
+  try {
+    var me = await api('/api/auth/me'); $('who').textContent = me.display_name;
+    await loadAgents();
+    var qi = filterBar('f-inc', 'i', function (q) { loadInc(q).catch(function (e) { alert(e.message); }); }, '/api/reports/incentives');
+    var ql = filterBar('f-log', 'l', function (q) { loadLog(q).catch(function (e) { alert(e.message); }); }, '/api/reports/call-log');
+    loadInc(qi()); loadLog(ql());
+  } catch (e) {}
+})();
+</script>
+<script src="/admin-desk.js"></script>
+<script src="/ship-gate.js"></script>
+<script src="/team-ui.js"></script>
+<script src="/agent-ui.js"></script>
+<script src="/plan-ui.js"></script>
+<script src="/tower-ui.js"></script>
+<script src="/report-ui.js"></script>
+<script src="/funnel-ui.js"></script>
+<script src="/channels-ui.js"></script>
+<script src="/scoreboard-ui.js"></script>
+<script>
+(function () {
+  var st = document.createElement('style'); st.textContent = '#p-funnel .fu,#p-channels .fu{margin:0}#p-scoreboard{padding:0}'; document.head.appendChild(st);
+  ReportUI.mount(document.getElementById('reportMount'), {
+    title: 'Daily report', team: 'all', teams: [{ v: 'all', l: 'All teams' }, { v: 'cc', l: 'Call centre' }, { v: 'inhouse', l: 'Aman (in-house)' }], excel: '/api/cc/funnel/download',
+    openList: function (status, range, team) { location.href = '/api/cc/export?type=orders&cohort=1&status=' + status + '&from=' + range.from + '&to=' + range.to + '&scope=' + team; }
+  });
+  ScoreboardUI.mount(document.getElementById('scoreboardMount'), { view: 'all', title: 'Scoreboard' });
+  var chMounted = false;
+  document.querySelector('.tab[data-p="channels"]').addEventListener('click', function () { if (!chMounted) { chMounted = true; ChannelUI.mount(document.getElementById('channelsMount'), { view: 'all', title: 'Confirmations by channel' }); } });
+  FunnelUI.mount(document.getElementById('funnelMount'), {
+    title: 'Funnel & lead board', team: 'all', period: 'last3',
+    teams: [{ v: 'all', l: 'All teams' }, { v: 'cc', l: 'Call centre' }, { v: 'inhouse', l: 'Aman (in-house)' }],
+    excel: '/api/cc/funnel/download',
+    openList: function (status, range, team, product) { location.href = '/api/cc/export?type=orders&cohort=1&status=' + status + '&from=' + range.from + '&to=' + range.to + '&scope=' + team + '&product=' + (product || ''); }
+  });
+})();
+</script>
+<script src="/home-ui.js"></script>
+</body>
+</html>

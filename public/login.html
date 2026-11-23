@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign in — Jaadu Diet CRM</title>
+<style>
+  :root { --bg:#050a18; --surface:#0d1425; --border:#1e2d4a; --text:#e8edf5; --muted:#7a8ba8; --accent:#f59e0b; --red:#ef4444; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: Inter, system-ui, sans-serif; background:var(--bg); color:var(--text); min-height:100vh; display:flex; align-items:center; justify-content:center; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:32px; width:92%; max-width:380px; }
+  h1 { font-size:1.2rem; margin-bottom:4px; } h1 span { color:var(--accent); }
+  p.sub { color:var(--muted); font-size:.8rem; margin-bottom:22px; }
+  label { display:block; font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); margin:14px 0 6px; }
+  input { width:100%; background:var(--bg); border:1px solid var(--border); color:var(--text); padding:11px 14px; border-radius:10px; font-size:.9rem; font-family:inherit; outline:none; }
+  input:focus { border-color:var(--accent); }
+  button { width:100%; margin-top:22px; background:linear-gradient(135deg,var(--accent),#ea580c); color:#000; border:none; padding:12px; border-radius:10px; font-weight:700; font-size:.9rem; cursor:pointer; }
+  button:disabled { opacity:.6; cursor:wait; }
+  .err { color:var(--red); font-size:.8rem; margin-top:14px; min-height:1.1em; }
+</style>
+</head>
+<body>
+<form class="card" id="f">
+  <h1><span>Jaadu Diet</span> CRM</h1>
+  <p class="sub">Sign in with your own agent account.</p>
+  <label for="u">Username</label>
+  <input id="u" autocomplete="username" autocapitalize="none" required autofocus>
+  <label for="p">Password</label>
+  <input id="p" type="password" autocomplete="current-password" required>
+  <button id="b" type="submit">Sign in</button>
+  <div class="err" id="e" role="alert"></div>
+</form>
+<script>
+  var next = new URLSearchParams(location.search).get('next') || '';
+  if (!/^\/[A-Za-z0-9._\-\/]*$/.test(next) || next.startsWith('//')) next = '';
+  var HOME = { admin: '/admin.html', aman: '/aman-crm.html', agent: '/cc-crm.html' };
+  document.getElementById('f').addEventListener('submit', async function (ev) {
+    ev.preventDefault();
+    var b = document.getElementById('b'), e = document.getElementById('e');
+    b.disabled = true; e.textContent = '';
+    try {
+      var r = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: document.getElementById('u').value, password: document.getElementById('p').value }) });
+      var d = await r.json().catch(function () { return {}; });
+      if (r.ok && d.success) {
+        location.href = next || HOME[d.agent && d.agent.role] || '/cc-crm.html';
+        return;
+      }
+      e.textContent = d.error || 'Login failed';
+    } catch (x) { e.textContent = 'Network error. Try again.'; }
+    b.disabled = false;
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Call Center CRM — Jaadu Diet</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: var(--ds-bg); --surface: var(--ds-surface); --surface2: var(--ds-surface-2); --surface3: var(--ds-surface-2);
+      --border: var(--ds-border); --border-light: var(--ds-border);
+      --text: var(--ds-text); --muted: var(--ds-muted); --dim: var(--ds-faint);
+      --accent: var(--ds-warn-ink); --accent2: var(--ds-warn-ink); --accent-glow: rgba(245,158,11,0.12);
+      --green: var(--ds-brand); --green-dim: rgba(16,185,129,0.12);
+      --red: var(--ds-danger); --red-dim: rgba(239,68,68,0.12);
+      --yellow: var(--ds-warn-ink); --yellow-dim: rgba(245,158,11,0.12);
+      --cyan: var(--ds-info); --purple: var(--ds-brand); --purple-dim: rgba(129,140,248,0.14);
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+    .header { background:var(--surface); border-bottom:1px solid var(--border); padding:0 24px; height:60px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:50; }
+    .header-left, .header-right { display:flex; align-items:center; gap:14px; }
+    .logo-mark { width:34px; height:34px; border-radius:10px; background:linear-gradient(135deg,var(--accent),#ea580c); display:flex; align-items:center; justify-content:center; font-size:0.75rem; font-weight:800; color:#000; }
+    .header-title { font-size:1rem; font-weight:700; } .header-title span { color:var(--accent2); }
+    .who { font-size:0.75rem; color:var(--muted); } .who b { color:var(--text); }
+    .link-btn { color:var(--muted); background:none; border:1px solid var(--border); padding:6px 12px; border-radius:8px; font-size:0.75rem; cursor:pointer; text-decoration:none; font-family:inherit; }
+    .link-btn:hover { color:var(--text); background:var(--surface2); }
+
+    .kpi-ribbon { display:flex; gap:10px; padding:16px 24px; overflow-x:auto; }
+    .kpi-card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px 18px; min-width:130px; text-align:center; flex-shrink:0; }
+    .kpi-card .value { font-size:1.75rem; font-weight:800; line-height:1.2; }
+    .kpi-card .label { font-size:0.75rem; color:var(--dim); text-transform:uppercase; letter-spacing:.7px; margin-top:4px; font-weight:600; }
+    .kpi-card.amber .value { color:var(--accent); } .kpi-card.green .value { color:var(--green); } .kpi-card.red .value { color:var(--red); }
+
+    .tabs-bar { display:flex; gap:2px; padding:0 24px; background:var(--surface); border-bottom:1px solid var(--border); }
+    .tab { padding:12px 18px; cursor:pointer; color:var(--muted); font-size:0.75rem; font-weight:600; border-bottom:2px solid transparent; display:flex; align-items:center; gap:8px; user-select:none; }
+    .tab:hover { color:var(--text); }
+    .tab.active { color:var(--accent2); border-bottom-color:var(--accent); }
+    .tab .count { background:var(--bg); padding:2px 8px; border-radius:8px; font-size:0.75rem; font-weight:700; min-width:24px; text-align:center; }
+    .tab-content { display:none; padding:20px 24px; } .tab-content.active { display:block; }
+
+    .toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; gap:12px; flex-wrap:wrap; }
+    .toolbar-info { color:var(--muted); font-size:0.75rem; }
+    .btn-refresh { background:var(--surface2); color:var(--text); border:1px solid var(--border); padding:7px 16px; border-radius:10px; font-size:0.75rem; font-weight:600; cursor:pointer; font-family:inherit; }
+    .btn-refresh:hover { border-color:var(--accent); }
+
+    .legend { display:flex; gap:16px; flex-wrap:wrap; align-items:center; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:10px 14px; margin-bottom:14px; font-size:0.75rem; color:var(--muted); }
+    .legend b { color:var(--text); }
+
+    .table-wrap { border-radius:14px; border:1px solid var(--border); overflow:auto; background:var(--surface); max-height:calc(100vh - 300px); }
+    table { width:100%; border-collapse:collapse; font-size:0.75rem; }
+    th { background:var(--surface2); color:var(--dim); text-transform:uppercase; font-size:0.75rem; letter-spacing:.8px; font-weight:700; padding:11px 14px; text-align:left; border-bottom:1px solid var(--border); position:sticky; top:0; z-index:5; }
+    td { padding:12px 14px; border-bottom:1px solid rgba(30,45,74,.5); vertical-align:middle; }
+    tr:hover td { background:rgba(245,158,11,.03); }
+    tr.cb-due td { background:var(--purple-dim); }
+    .order-id { font-weight:700; font-size:0.875rem; } .sub-text { color:var(--dim); font-size:0.75rem; margin-top:2px; }
+    .phone-link { color:var(--cyan); text-decoration:none; font-weight:500; }
+
+    .badge { display:inline-flex; align-items:center; padding:3px 10px; border-radius:8px; font-size:0.75rem; font-weight:700; margin:1px 2px 1px 0; }
+    .badge-yellow { background:var(--yellow-dim); color:var(--yellow); }
+    .badge-red { background:var(--red-dim); color:var(--red); }
+    .badge-green { background:var(--green-dim); color:var(--green); }
+    .badge-purple { background:var(--purple-dim); color:var(--purple); }
+    .risk { cursor:help; position:relative; }
+    .risk.Low { background:var(--green-dim); color:var(--green); }
+    .risk.Medium { background:var(--yellow-dim); color:var(--yellow); }
+    .risk.High { background:var(--red-dim); color:var(--red); }
+    .risk .tip { display:none; position:absolute; left:0; top:120%; z-index:40; width:260px; background:var(--surface3); border:1px solid var(--border-light); border-radius:10px; padding:10px 12px; color:var(--text); font-weight:500; font-size:0.75rem; box-shadow:0 8px 30px rgba(0,0,0,.5); white-space:normal; }
+    .risk:hover .tip, .risk:focus .tip { display:block; }
+    .risk .tip li { margin-left:14px; margin-bottom:3px; }
+    .hint { color:var(--yellow); font-size:0.75rem; margin-top:3px; max-width:220px; }
+
+    .btn { padding:6px 12px; border:none; border-radius:9px; cursor:pointer; font-size:0.75rem; font-weight:700; font-family:inherit; }
+    .btn:hover { filter:brightness(1.12); } .btn:disabled { opacity:.4; cursor:not-allowed; }
+    .btn-confirm { background:var(--green); color:#000; } .btn-cancel { background:var(--red); color:#fff; }
+    .btn-rnr { background:var(--accent); color:#000; } .btn-cb { background:var(--purple); color:#fff; }
+    .btn-pay { background:var(--cyan); color:#000; } .btn-neutral { background:var(--surface3); color:var(--text); border:1px solid var(--border-light); }
+    .btn-group { display:flex; gap:5px; flex-wrap:wrap; max-width:380px; }
+
+    .empty-state { text-align:center; padding:56px 20px; color:var(--dim); }
+    .empty-title { font-size:1rem; font-weight:600; color:var(--muted); margin-bottom:4px; }
+
+    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(5,10,24,.8); backdrop-filter:blur(6px); z-index:200; align-items:center; justify-content:center; }
+    .modal-overlay.active { display:flex; }
+    .modal { background:var(--surface); border:1px solid var(--border-light); border-radius:20px; width:92%; max-width:480px; max-height:92vh; overflow:auto; }
+    .modal-header { padding:20px 24px 0; display:flex; align-items:center; justify-content:space-between; }
+    .modal-header h3 { font-size:1rem; font-weight:700; }
+    .modal-close { width:32px; height:32px; border-radius:10px; background:var(--surface2); border:1px solid var(--border); color:var(--muted); cursor:pointer; font-size:1rem; }
+    .modal-body { padding:18px 24px; }
+    .modal-body label { display:block; color:var(--dim); font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:.5px; margin:12px 0 6px; }
+    .modal-body textarea, .modal-body select, .modal-body input { width:100%; background:var(--bg); border:1px solid var(--border); color:var(--text); padding:10px 14px; border-radius:10px; font-size:0.875rem; font-family:inherit; outline:none; }
+    .modal-body textarea { min-height:80px; resize:vertical; }
+    .modal-body textarea:focus, .modal-body select:focus, .modal-body input:focus { border-color:var(--accent); }
+    .msg { margin-bottom:6px; padding:12px 16px; border-radius:10px; font-size:0.875rem; font-weight:600; }
+    .linkbox { word-break:break-all; background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:10px 12px; font-size:0.875rem; color:var(--cyan); }
+    .modal-footer { padding:0 24px 20px; display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
+    .btn-modal-cancel { background:var(--surface2); color:var(--muted); border:1px solid var(--border); padding:9px 20px; border-radius:10px; font-size:0.75rem; font-weight:600; cursor:pointer; font-family:inherit; }
+    .btn-submit { border:none; padding:9px 24px; border-radius:10px; font-size:0.75rem; font-weight:700; cursor:pointer; font-family:inherit; }
+
+    .toast-container { position:fixed; top:72px; right:24px; z-index:300; display:flex; flex-direction:column; gap:8px; }
+    .toast { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:12px 18px; font-size:0.75rem; min-width:260px; max-width:360px; box-shadow:0 8px 30px rgba(0,0,0,.4); }
+    .toast.success { border-left:3px solid var(--green); } .toast.error { border-left:3px solid var(--red); }
+    @media (max-width:768px) { .header { padding:0 14px; } .tab-content { padding:14px; } .kpi-ribbon { padding:12px 14px; } .who span { display:none; } }
+  </style>
+<link rel="stylesheet" href="/ds.css">
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <div class="logo-mark">CC</div>
+    <div class="header-title"><span>Call Center</span> CRM</div>
+  </div>
+  <div class="header-right">
+    <div class="who"><span>Signed in as </span><b id="who">…</b></div>
+    <a class="link-btn" id="amanLink" href="/aman-crm.html" style="display:none">Aman CRM</a>
+    <a class="link-btn" id="adminLink" href="/admin.html" style="display:none">Admin</a>
+    <button class="link-btn" onclick="logout()">Log out</button>
+  </div>
+</div>
+
+<div id="funnelMount"></div>
+
+<div class="tabs-bar">
+  <div class="tab active" data-tab="fresh">Fresh Leads <span class="count" id="countFresh">0</span></div>
+  <div class="tab" data-tab="callbacks">Callbacks <span class="count" id="countCb">0</span></div>
+  <div class="tab" data-tab="ccreport">Daily Report</div>
+</div>
+
+<div class="tab-content active" id="tab-fresh">
+  <div class="qchips" id="qChips"></div>
+  <div class="legend" id="legend"></div>
+  <div class="toolbar">
+    <span class="toolbar-info" id="info">Loading…</span>
+    <button class="btn-refresh" onclick="loadAll()">Refresh</button>
+  </div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Order date</th><th>Order</th><th>Product</th><th>Customer</th><th>Phone</th><th>Address</th><th>Amount</th><th>Risk</th><th>Age</th><th>Attempts</th><th>Actions</th></tr></thead>
+    <tbody id="tbody"></tbody>
+  </table></div>
+</div>
+
+<div class="tab-content" id="tab-callbacks">
+  <div class="toolbar"><span class="toolbar-info" id="cbInfo">Scheduled callbacks (these return to Fresh Leads at the chosen time)</span>
+    <button class="btn-refresh" onclick="loadAll()">Refresh</button></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Order</th><th>Customer</th><th>Phone</th><th>Address</th><th>Amount</th><th>Callback at</th><th>Note</th></tr></thead>
+    <tbody id="cbBody"></tbody>
+  </table></div>
+</div>
+
+<div class="tab-content" id="tab-ccreport"><div id="ccReportMount"></div></div>
+
+<div class="modal-overlay" id="modalBg">
+  <div class="modal">
+    <div class="modal-header"><h3 id="mTitle">Disposition</h3><button class="modal-close" onclick="closeModal()">&times;</button></div>
+    <div class="modal-body">
+      <div id="mMsg" class="msg" style="display:none"></div>
+      <div id="mReasonF" style="display:none"><label>Cancel reason *</label><select id="mReason"></select></div>
+      <div id="mCbF" style="display:none"><label>Call back on *</label><input type="datetime-local" id="mCb"></div>
+      <div id="mAddrF" style="display:none"><label>New address *</label><textarea id="mAddr" placeholder="Enter corrected address…"></textarea></div>
+      <div id="mLinkF" style="display:none"><div class="linkbox" id="mLink"></div><div class="sub-text" id="mLinkInfo" style="margin-top:8px"></div></div>
+      <div id="mNotesF"><label id="mNotesL">Notes</label><textarea id="mNotes" placeholder="Add any notes…"></textarea></div>
+    </div>
+    <div class="modal-footer" id="mFooter"></div>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+var META = null, CURRENT = null, LEADS = {};
+
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function $(id) { return document.getElementById(id); }
+
+async function api(path, body) {
+  var opt = body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+  var r = await fetch(path, opt);
+  if (r.status === 401) { location.href = '/login.html?next=/cc-crm.html'; throw new Error('login'); }
+  var d = await r.json().catch(function () { return {}; });
+  if (!r.ok) { var e = new Error(d.error || ('Error ' + r.status)); e.data = d; throw e; }
+  return d;
+}
+
+function showToast(msg, type) {
+  var t = document.createElement('div');
+  t.className = 'toast ' + (type || 'success');
+  t.textContent = msg;
+  $('toastContainer').appendChild(t);
+  setTimeout(function () { t.remove(); }, 4000);
+}
+
+document.querySelectorAll('.tab').forEach(function (tab) {
+  tab.addEventListener('click', function () {
+    document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
+    document.querySelectorAll('.tab-content').forEach(function (t) { t.classList.remove('active'); });
+    tab.classList.add('active');
+    $('tab-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+async function logout() { try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (e) {} location.href = '/login.html'; }
+
+function ageStr(m) {
+  if (!m) return '—'; m = Math.round(m);
+  if (m < 60) return m + 'm';
+  if (m < 1440) return Math.floor(m / 60) + 'h ' + (m % 60) + 'm';
+  return Math.floor(m / 1440) + 'd';
+}
+function fmtDT(s) { return s ? new Date(s).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'; }
+
+function productName(d) {
+  try {
+    var items = typeof d.line_items === 'string' ? JSON.parse(d.line_items) : (d.line_items || []);
+    if (!items.length) return '—';
+    var qty = items.reduce(function (s, i) { return s + (Number(i.quantity) > 0 ? Number(i.quantity) : 1); }, 0); return (items[0].title || '—') + ' <b style="margin-left:6px;padding:1px 7px;border-radius:6px;background:var(--ds-brand-tint);color:var(--ds-brand);white-space:nowrap">Qty ' + qty + '</b>';
+  } catch(e) { return '—'; }
+}
+
+function riskBadge(d) {
+  var items = (d.risk_reasons || []).map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('');
+  return '<span class="badge risk ' + esc(d.risk_level) + '" tabindex="0">' + esc(d.risk_level) +
+    '<span class="tip"><b>' + esc(d.risk_level) + ' risk</b> (' + esc(d.risk_points) + ' pts)<ul>' + items + '</ul></span></span>';
+}
+
+async function loadMeta() {
+  META = await api('/api/cc/meta');
+  $('who').textContent = META.agent.display_name;
+  if (META.agent.role === 'admin') $('adminLink').style.display = '';
+  if (META.agent.role === 'admin' || META.agent.role === 'aman') $('amanLink').style.display = '';
+  var r = META.dnp_rules;
+  $('legend').innerHTML = '<span><b>Risk:</b></span>' + META.risk_legend.map(function (l) {
+    return '<span><span class="badge risk ' + esc(l.level) + '">' + esc(l.level) + '</span> ' + esc(l.text) + '</span>';
+  }).join('') + '<span><b>DNP rule:</b> ' + r.min_daily + '–' + r.max_daily + ' attempts a day, about ' + r.min_gap_minutes +
+    ' min apart; follow up for ' + r.followup_days + ' days.</span>';
+  var sel = $('mReason');
+  sel.innerHTML = '<option value="">Select a reason…</option>' + Object.keys(META.cancel_reasons).map(function (k) {
+    return '<option value="' + esc(k) + '">' + esc(META.cancel_reasons[k]) + '</option>';
+  }).join('');
+}
+
+async function loadKPI() {
+  try {
+    var d = await api('/api/cc/kpi');
+    var h = '<div class="kpi-card amber"><div class="value">' + (d.pending_cc || 0) + '</div><div class="label">CC Pending</div></div>' +
+      '<div class="kpi-card green"><div class="value">' + (d.today_confirmed || 0) + '</div><div class="label">Today Confirmed</div></div>' +
+      '<div class="kpi-card red"><div class="value">' + (d.today_cancelled || 0) + '</div><div class="label">Today Cancelled</div></div>' +
+      '<div class="kpi-card green"><div class="value">' + (d.today_confirm_rate || 0) + '%</div><div class="label">Confirm Rate</div></div>' +
+      '<div class="kpi-card amber"><div class="value">' + (d.today_orders || 0) + '</div><div class="label">Today Total</div></div>';
+    // Order-based connectivity
+    try {
+      var c = await api('/api/cc/kpi/connectivity?team=CC');
+      var cov1ok = c.attempt_1_coverage_pct >= 95;
+      h += '<div class="kpi-card ' + (cov1ok ? 'green' : 'red') + '"><div class="value">' + c.attempt_1_coverage_pct + '%</div><div class="label">1st Attempt Coverage</div></div>' +
+        '<div class="kpi-card green"><div class="value">' + c.attempt_1_connectivity_pct + '%</div><div class="label">1st Attempt Connectivity</div></div>' +
+        '<div class="kpi-card green"><div class="value">' + c.overall_connectivity_pct + '%</div><div class="label">Overall Connectivity</div></div>' +
+        '<div class="kpi-card amber"><div class="value">' + c.not_called + '</div><div class="label">Not Called Yet</div></div>';
+    } catch (e2) {}
+    $('kpi').innerHTML = h;
+  } catch (e) {}
+}
+
+var LEADS_DATA = [];
+async function loadLeads() {
+  try {
+    LEADS_DATA = await api('/api/cc/fresh-leads');
+    LEADS = {}; LEADS_DATA.forEach(function (d) { LEADS[d.id] = d; });
+    renderLeads();
+  } catch (e) { if (e.message !== 'login') $('info').textContent = 'Could not load leads: ' + e.message; }
+}
+function renderLeads() {
+  var Qx = window.CRMX && CRMX.queue, all = LEADS_DATA;
+  var data = Qx ? Qx.rows(all) : all, ready = Qx ? Qx.ready(all) : all.length;
+  if (Qx) { $('qChips').innerHTML = Qx.chips(all); Qx.bind($('qChips'), renderLeads); }
+  $('countFresh').textContent = ready;
+  $('info').textContent = ready + ' ready to call · ' + (all.length - ready) + ' waiting or done for today · ' + new Date().toLocaleTimeString();
+  if (!data.length) { $('tbody').innerHTML = '<tr><td colspan="11"><div class="empty-state"><div class="empty-title">' + (all.length ? 'Nothing in this view' : 'Queue is clear') + '</div>' + (all.length ? 'Try another tab above' : 'No leads waiting for calls') + '</div></td></tr>'; return; }
+  $('tbody').innerHTML = data.map(function (d, i) {
+      var p = d.dnp || {};
+      var dnpLine = p.totalAttempts ? '<div class="sub-text">DNP today: <b>' + p.todayCount + '</b> / ' + META.dnp_rules.min_daily + '–' + META.dnp_rules.max_daily + '</div>' : '';
+      var hint = p.hint ? '<div class="hint">' + esc(p.hint) + '</div>' : '';
+      var badges = (d.callback_badge ? '<span class="badge badge-purple">Callback' + (d.callback_badge === 'due' ? ' due' : '') + '</span>' : '');
+      var needsFix = d.address_is_short && !d.address_fixed;
+      var cbNote = d.callback_note ? '<div class="sub-text">“' + esc(d.callback_note) + '”</div>' : '';
+      var id = esc(d.id);
+      return '<tr class="' + (d.callback_badge ? 'cb-due' : '') + (Qx ? Qx.cls(d, i) : '') + '">' +
+        '<td>' + esc(fmtDT(d.shopify_created_at || d.created_at)) + '</td>' +
+        '<td><div class="order-id">' + esc(d.order_name || '#' + d.shopify_order_id) + '</div><div class="sub-text">' + esc(d.payment_method) + '</div>' + badges + (Qx ? Qx.why(d, i) : '') + '</td>' +
+        '<td><span class="badge badge-blue" style="font-size:0.75rem">' + productName(d) + '</span></td>' +
+        '<td>' + esc(d.customer_name || '—') + cbNote + '</td>' +
+        '<td><a href="tel:' + esc(d.customer_phone) + '" class="phone-link">' + esc(d.customer_phone) + '</a></td>' +
+        '<td class="addr">' + (window.CRMX ? CRMX.addrCell(d) : esc(d.shipping_city || '—')) + '</td>' +
+        '<td><strong>₹' + esc(d.total_price) + '</strong></td>' +
+        '<td>' + riskBadge(d) + '</td>' +
+        '<td>' + ageStr(d.age_minutes) + '</td>' +
+        '<td>' + (d.call_attempts || 0) + dnpLine + hint + '</td>' +
+        '<td><div class="btn-group">' +
+          '<button class="btn btn-confirm" onclick="act(\'' + id + '\',\'confirmed\')">Confirm</button>' +
+          '<button class="btn btn-cancel" onclick="act(\'' + id + '\',\'cancelled\')">Cancel</button>' +
+          '<button class="btn btn-rnr" ' + (p.atMax ? 'disabled title="Daily maximum reached"' : '') + ' onclick="act(\'' + id + '\',\'dnp\')">DNP</button>' +
+          '<button class="btn btn-cb" onclick="act(\'' + id + '\',\'callback\')">Callback</button>' +
+          '<button class="btn ' + (needsFix ? 'btn-rnr' : 'btn-neutral') + '" onclick="act(\'' + id + '\',\'address_fix\')">Fix address</button>' +
+          '<button class="btn btn-pay" onclick="act(\'' + id + '\',\'prepaid\')">Prepaid link</button>' +
+          '<button class="btn btn-neutral" onclick="act(\'' + id + '\',\'wrong_number\')">Wrong no.</button>' +
+          '<button class="btn btn-neutral" onclick="act(\'' + id + '\',\'escalated\')">Escalate</button>' +
+          '<button class="btn btn-neutral" onclick="act(\'' + id + '\',\'dnc\')">Do not call</button>' +
+          '<button class="btn btn-neutral" onclick="act(\'' + id + '\',\'note\')">Note</button>' +
+        '</div></td></tr>';
+  }).join('');
+}
+async function loadCallbacks() {
+  try {
+    var data = await api('/api/cc/callbacks');
+    $('countCb').textContent = data.length;
+    $('cbBody').innerHTML = data.length ? data.map(function (d) {
+      return '<tr><td><div class="order-id">' + esc(d.order_name) + '</div></td><td>' + esc(d.customer_name || '—') + '</td>' +
+        '<td><a href="tel:' + esc(d.customer_phone) + '" class="phone-link">' + esc(d.customer_phone) + '</a></td>' +
+        '<td style="max-width:220px;word-wrap:break-word;font-size:0.75rem">' + esc(d.shipping_address1 || '—') + '<div class="sub-text">' + esc(d.shipping_city || '') + (d.shipping_zip ? ', ' + esc(d.shipping_zip) : '') + '</div></td>' +
+        '<td>₹' + esc(d.total_price) + '</td><td><span class="badge badge-purple">' + esc(fmtDT(d.callback_at)) + '</span></td><td>' + esc(d.callback_note || '') + '</td></tr>';
+    }).join('') : '<tr><td colspan="7"><div class="empty-state"><div class="empty-title">No scheduled callbacks</div></div></td></tr>';
+  } catch (e) {}
+}
+
+async function loadAddressFix() {
+  try {
+    var data = await api('/api/cc/address-fix');
+    $('countAddr').textContent = data.length;
+    $('addrInfo').textContent = data.length + ' addresses need fixing';
+    LEADS_ADDR = {}; data.forEach(function (d) { LEADS_ADDR[d.id] = d; });
+    $('addrBody').innerHTML = data.length ? data.map(function (d) {
+      return '<tr><td><div class="order-id">' + esc(d.order_name || '#' + d.shopify_order_id) + '</div></td><td>' + esc(d.customer_name || '—') + '</td>' +
+        '<td><a href="tel:' + esc(d.customer_phone) + '" class="phone-link">' + esc(d.customer_phone) + '</a></td>' +
+        '<td style="max-width:250px;word-wrap:break-word">' + esc(d.shipping_address1 || '—') + '<div class="sub-text">' + esc(d.shipping_address2) + '</div></td>' +
+        '<td>' + esc(d.shipping_city || '—') + '</td><td>' + esc(d.shipping_zip || '—') + '</td>' +
+        '<td><button class="btn btn-cb" onclick="act(\'' + esc(d.id) + '\',\'address_fix\')">Fix address</button></td></tr>';
+    }).join('') : '<tr><td colspan="7"><div class="empty-state"><div class="empty-title">All addresses verified</div></div></td></tr>';
+  } catch (e) {}
+}
+var LEADS_ADDR = {};
+
+// ---- action modal -------------------------------------------------------
+var CFG = {
+  confirmed:    { title: 'Confirm order', msg: 'Confirm this order?', color: 'green', btn: 'Yes, confirm' },
+  cancelled:    { title: 'Cancel order', msg: 'Cancel this order? A reason is required.', color: 'red', btn: 'Yes, cancel order', reason: true },
+  dnp:          { title: 'Did not pick up (DNP)', msg: 'Record a DNP attempt?', color: 'yellow', btn: 'Record DNP' },
+  callback:     { title: 'Schedule callback', color: 'purple', btn: 'Schedule callback', cb: true },
+  wrong_number: { title: 'Wrong number / invalid details', msg: 'Mark this number as wrong / invalid? The lead leaves the queue.', color: 'yellow', btn: 'Mark wrong number' },
+  escalated:    { title: 'Escalate to in-house team', msg: 'Hand this lead to the in-house team. A note is required.', color: 'yellow', btn: 'Escalate', noteReq: true },
+  dnc:          { title: 'Do not call', msg: 'This lead will never return to the queue. Admin can review the list.', color: 'red', btn: 'Flag Do Not Call' },
+  address_fix:  { title: 'Fix address', color: 'purple', btn: 'Save address', addr: true },
+  note:         { title: 'Add note', color: 'purple', btn: 'Save note', noteReq: true },
+  prepaid:      { title: 'Send prepaid link', color: 'cyan', btn: 'Generate link' },
+};
+var COLORS = { green: ['var(--green)', '#000', 'var(--green-dim)'], red: ['var(--red)', '#fff', 'var(--red-dim)'], yellow: ['var(--accent)', '#000', 'var(--yellow-dim)'], purple: ['var(--purple)', '#fff', 'var(--purple-dim)'], cyan: ['var(--cyan)', '#000', 'rgba(6,182,212,.12)'] };
+
+async function act(id, action) {
+  var lead = LEADS[id] || LEADS_ADDR[id];
+  if (action !== 'address_fix') {
+    try {
+      var l = await api('/api/cc/lead/lock', { order_id: id });
+      if (!l.locked) { showToast('Being handled by ' + (l.locked_by || 'another agent'), 'error'); return; }
+    } catch (e) { if (e.message !== 'login') showToast(e.message, 'error'); return; }
+  }
+  if (action === 'dnp' && lead && lead.dnp && lead.dnp.tooSoon) {
+    if (!confirm(lead.dnp.hint + '\n\nRecord the DNP anyway?')) { unlock(id); return; }
+  }
+  CURRENT = { id: id, action: action, lead: lead };
+  var c = CFG[action], col = COLORS[c.color];
+  $('mTitle').textContent = c.title + (lead ? ' — ' + (lead.order_name || '') : '');
+  var m = $('mMsg');
+  m.style.display = c.msg ? 'block' : 'none'; m.textContent = c.msg || '';
+  m.style.background = col[2]; m.style.color = col[0];
+  $('mReasonF').style.display = c.reason ? 'block' : 'none'; $('mReason').value = '';
+  $('mCbF').style.display = c.cb ? 'block' : 'none'; $('mCb').value = '';
+  $('mAddrF').style.display = c.addr ? 'block' : 'none'; $('mAddr').value = '';
+  if (action === 'address_fix' && lead) {
+    $('mAddr').value = lead.shipping_address1 || '';
+    m.style.display = 'block'; m.textContent = 'Current address: ' + (window.CRMX ? CRMX.fullAddr(lead) : (lead.shipping_address1 || ''));
+  }
+  $('mLinkF').style.display = 'none';
+  $('mNotesF').style.display = 'block'; $('mNotes').value = '';
+  $('mNotesL').textContent = c.noteReq ? 'Note *' : (action === 'cancelled' ? 'Note (required if reason is Other)' : 'Notes');
+  var f = $('mFooter');
+  f.innerHTML = '<button class="btn-modal-cancel" onclick="closeModal()">Go back</button>' +
+    '<button id="mSubmit" class="btn-submit" style="background:' + col[0] + ';color:' + col[1] + '" onclick="submitAct()">' + esc(c.btn) + '</button>';
+  $('modalBg').classList.add('active');
+}
+
+function unlock(id) { fetch('/api/cc/lead/unlock', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ order_id: id }) }).catch(function () {}); }
+function closeModal() {
+  $('modalBg').classList.remove('active');
+  if (CURRENT && CURRENT.action !== 'address_fix') unlock(CURRENT.id);
+  CURRENT = null; loadAll();
+}
+
+async function submitAct() {
+  var cur = CURRENT, btn = $('mSubmit'); if (!cur) return;
+  var notes = $('mNotes').value.trim();
+  btn.disabled = true;
+  try {
+    if (cur.action === 'note') {
+      if (!notes) throw new Error('Note is empty');
+      await api('/api/cc/lead/note', { order_id: cur.id, note: notes });
+      showToast('Note saved'); CURRENT = null; $('modalBg').classList.remove('active'); unlock(cur.id); loadAll(); return;
+    }
+    if (cur.action === 'prepaid') { await sendPrepaid(cur, false); return; }
+    var body = { order_id: cur.id, disposition: cur.action, notes: notes };
+    if (cur.action === 'cancelled') { body.reason_code = $('mReason').value; if (!body.reason_code) throw new Error('Select a cancel reason'); }
+    if (cur.action === 'callback') {
+      var v = $('mCb').value; if (!v) throw new Error('Pick a callback date and time');
+      body.callback_at = new Date(v).toISOString();
+    }
+    if (cur.action === 'address_fix') { body.new_address = $('mAddr').value.trim(); if (!body.new_address) throw new Error('Enter the new address'); }
+    if (cur.action === 'escalated' && !notes) throw new Error('Add a note for the escalation');
+    var d = await api('/api/cc/lead/disposition', body);
+    var extra = d.dnp ? ' (DNP today: ' + d.dnp.todayCount + '/' + META.dnp_rules.max_daily + (d.dnp.belowTarget ? ', ' + d.dnp.neededToday + ' more needed' : '') + ')' : '';
+    showToast('Saved: ' + cur.action.replace('_', ' ') + extra);
+    CURRENT = null; $('modalBg').classList.remove('active'); loadAll();
+  } catch (e) {
+    if (e.message !== 'login') showToast(e.message, 'error');
+    btn.disabled = false;
+  }
+}
+
+async function sendPrepaid(cur, force) {
+  var d = await api('/api/cc/lead/prepaid-link', { order_id: cur.id, force: !!force });
+  var phone = String((cur.lead && cur.lead.customer_phone) || '').replace(/\D/g, '');
+  var text = 'Hello, please pay ₹' + d.amount + ' to confirm your Jaadu Diet order: ' + d.short_url;
+  $('mMsg').style.display = 'block'; $('mMsg').textContent = d.reused ? 'An open link already exists (sent by ' + d.sent_by + ').' : 'Payment link created.';
+  $('mReasonF').style.display = $('mCbF').style.display = $('mAddrF').style.display = $('mNotesF').style.display = 'none';
+  $('mLinkF').style.display = 'block'; $('mLink').textContent = d.short_url;
+  $('mLinkInfo').textContent = '₹' + d.amount + ' · sent ' + fmtDT(d.sent_at) + ' by ' + d.sent_by + '. Incentive is credited only after payment is received.';
+  $('mFooter').innerHTML = '<button class="btn-modal-cancel" onclick="closeModal()">Close</button>' +
+    '<button class="btn btn-neutral" id="mNew">New link</button>' +
+    '<button class="btn btn-neutral" id="mCopy">Copy</button>' +
+    '<a class="btn btn-pay" style="text-decoration:none" target="_blank" rel="noopener" href="https://wa.me/' + (phone.length === 10 ? '91' + phone : phone) + '?text=' + encodeURIComponent(text) + '">WhatsApp</a>';
+  $('mCopy').onclick = function () { navigator.clipboard.writeText(d.short_url).then(function () { showToast('Link copied'); }); };
+  $('mNew').onclick = async function () { try { await sendPrepaid(cur, true); } catch (e) { showToast(e.message, 'error'); } };
+}
+
+
+async function loadAll() { await Promise.all([loadLeads(), loadCallbacks()]); }
+(async function init() { try { await loadMeta(); loadAll(); setInterval(function () { if (!CURRENT) loadAll(); }, 30000); } catch (e) {} })();
+</script>
+<script src="/crm-ext.js"></script>
+<script src="/report-ui.js"></script>
+<script src="/funnel-ui.js"></script>
+<script src="/channels-ui.js"></script>
+<script src="/scoreboard-ui.js"></script>
+<script>
+(function () {
+  ReportUI.mount(document.getElementById('ccReportMount'), { title: 'Call centre - daily report', team: 'cc', teams: [{ v: 'cc', l: 'Call centre' }], excel: '/api/cc/funnel/download', openList: function (status, range, team, product, label) { CRMX.openOrders(status, range, team, product, label); } });
+  var fu = FunnelUI.strip(document.getElementById('funnelMount'), {
+    workPage: true, reportTab: '.tab[data-tab="ccreport"]', title: 'Call centre - daily report', team: 'cc', period: 'all', channelsView: 'cc', channelsTitle: 'Call centre - calls report', scoreView: 'cc', scoreTitle: 'Call centre - how we are doing', teams: [{ v: 'cc', l: 'Call centre' }],
+    excel: '/api/cc/funnel/download', openList: function (status, range, team, product, label) { CRMX.openOrders(status, range, team, product, label); }
+  });
+  document.addEventListener('crmx:changed', function () { fu.refresh(); });
+  setInterval(function () { fu.refresh(); }, 120000);
+})();
+</script>
+<script src="/ds-shell.js"></script>
+</body>
+</html>
