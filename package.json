@@ -1,0 +1,31 @@
+{
+  "name": "jaadu-diet-crm",
+  "version": "1.0.0",
+  "description": "Jaadu Diet (Arjuna Tea) Order Management & CRM System",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "cron": "node cron_jobs.js",
+    "setup-db": "node setup_db.js",
+    "migrate": "node migrate.js",
+    "migrate:apply": "node migrate.js --apply",
+    "agent": "node scripts/agent-admin.js",
+    "test": "node --test test/*.test.js",
+    "local": "node scripts/local-dev.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.5",
+    "crypto": "^1.0.1",
+    "dotenv": "^16.3.1",
+    "exceljs": "^4.4.0",
+    "express": "^4.18.2",
+    "googleapis": "^130.0.0",
+    "node-cron": "^3.0.3",
+    "pg": "^8.12.0",
+    "razorpay": "^2.9.2"
+  },
+  "devDependencies": {
+    "embedded-postgres": "^17.10.0-beta.17",
+    "xlsx": "^0.18.5"
+  }
+}

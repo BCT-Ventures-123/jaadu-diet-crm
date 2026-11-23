@@ -1,0 +1,7 @@
+node_modules/
+.env
+railway-env.txt
+credentials/
+*.log
+
+.localdb/
