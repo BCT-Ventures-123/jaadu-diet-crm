@@ -13,7 +13,7 @@ test('wa settings: modes, tolerant values, safe defaults', () => {
   for (const v of ['on', 'ON', ' "on" ', 'true', '1', 'yes']) assert.equal(wa.settings({ WA_MODE: v }).mode, 'on');
   assert.equal(wa.settings({ WA_MODE: 'test' }).mode, 'test'); assert.equal(wa.settings({ WA_MODE: 'maybe' }).mode, 'off');
   const d = wa.settings({});
-  assert.deepEqual(d.enabledKeys, ['confirm']);   // reminders are off until their templates are approved
+  assert.deepEqual(d.enabledKeys, ['confirm', 'reminder_1', 'reminder_2']);   // all three messages use the approved confirm template
   assert.equal(d.reminderHours, 4); assert.equal(d.maxReminders, 2); assert.equal(d.busyHoldMinutes, 30); assert.equal(d.holdMinutes, 0); assert.equal(d.quietFrom, 21); assert.equal(d.quietTo, 8); assert.equal(d.minAmount, 350);
   assert.equal(wa.settings({ WA_MAX_REMINDERS: '9' }).maxReminders, 3);                       // never more than 3
   assert.deepEqual(S.testNumbers, ['9076219087', '8459803501']);
@@ -35,9 +35,9 @@ test('wa quiet hours: none between 21:00 and 08:00 India time', () => {
   assert.equal(wa.quietEnds(T('2026-11-21T20:00:00Z'), S).toISOString(), '2026-11-22T02:30:00.000Z');
 });
 
-test('wa decide: a new order gets the confirmation at once, not at night', () => {
+test('wa decide: a new order gets the confirmation at once, at ANY hour (night too)', () => {
   const d = wa.decide(base, T(DAY), S); assert.equal(d.action, 'offer'); assert.equal(d.step, 0); assert.equal(d.template_key, 'confirm');
-  const n = wa.decide(base, T(NIGHT), S); assert.equal(n.action, 'wait'); assert.equal(n.reason, 'quiet_hours'); assert.equal(n.not_before.toISOString(), '2026-11-22T02:30:00.000Z');
+  const n = wa.decide(base, T(NIGHT), S); assert.equal(n.action, 'offer'); assert.equal(n.step, 0); assert.equal(n.template_key, 'confirm');
 });
 
 test('wa decide: stop rules', () => {
@@ -59,12 +59,12 @@ test('wa decide: reminders come 4 hours after the previous message was SENT, at 
   const q = wa.decide(sent(0, '2026-11-21T10:00:00Z'), T('2026-11-21T16:00:00Z'), S); assert.equal(q.reason, 'quiet_hours');   // due at 14:00 UTC, asked at 21:30 IST
 });
 
-test('wa decide: a person or the IVR reaching the customer holds the reminder back, but never the first message', () => {
+test('wa decide: a person who really spoke to the customer holds the reminder back; an IVR call or a planned callback does not; never the first message', () => {
   const sent0 = { ...base, last_step: 0, last_status: 'sent', last_sent_at: '2026-11-21T01:00:00Z' };
   assert.equal(wa.decide({ ...sent0, person_spoke_at: '2026-11-21T05:00:00Z' }, T(DAY), S).reason, 'person_spoke_recently');
   assert.equal(wa.decide({ ...sent0, person_spoke_at: '2026-11-21T02:00:00Z' }, T(DAY), S).action, 'offer');          // spoke 4.5 h ago: fine
-  assert.equal(wa.decide({ ...sent0, ivr_at: '2026-11-21T06:00:00Z' }, T(DAY), S).reason, 'ivr_called_recently');
-  assert.equal(wa.decide({ ...sent0, callback_at: '2026-11-21T09:00:00Z' }, T(DAY), S).reason, 'callback_planned');
+  assert.equal(wa.decide({ ...sent0, ivr_at: '2026-11-21T06:00:00Z' }, T(DAY), S).action, 'offer');                    // owner: no wait after an IVR call
+  assert.equal(wa.decide({ ...sent0, callback_at: '2026-11-21T09:00:00Z' }, T(DAY), S).action, 'offer');               // owner: no wait for a planned callback
   assert.equal(wa.decide({ ...base, person_spoke_at: DAY }, T(DAY), S).action, 'offer');                                // step 0 is not held back
 });
 
@@ -217,7 +217,9 @@ test('wa check: the last look before a send', async () => {
   assert.deepEqual(await wa.check(gone, 'o1-s0', T(DAY), env), { send: false, reason: 'order_no_longer_pending' });
   assert.equal((await wa.check(fakeDb({ 'FROM wa_messages WHERE send_id': () => [msg({ status: 'sent' })] }), 'o1-s0', T(DAY), env)).reason, 'already_sent');
   assert.equal((await wa.check(fakeDb({ 'FROM wa_messages WHERE send_id': () => [] }), 'nope', T(DAY), env)).reason, 'unknown_send_id');
-  assert.equal((await wa.check(ok, 'o1-s0', T(NIGHT), env)).reason, 'quiet_hours');
+  assert.deepEqual(await wa.check(ok, 'o1-s0', T(NIGHT), env), { send: true });                                             // the first message goes at any hour
+  const nightRem = fakeDb({ 'FROM wa_messages WHERE send_id': () => [msg({ send_id: 'o1-s1', step: 1, template_key: 'reminder_1' })], 'FROM orders_master o': () => [order({ id: 'o1' })] });
+  assert.equal((await wa.check(nightRem, 'o1-s1', T(NIGHT), env)).reason, 'quiet_hours');                                    // a reminder never goes at night
   assert.equal((await wa.check(ok, 'o1-s0', T(DAY), { WA_MODE: 'off' })).reason, 'mode_off');
   const optout = fakeDb({ 'FROM wa_messages WHERE send_id': () => [m], 'FROM orders_master o': () => [order({ opted_out: true })] });
   assert.equal((await wa.check(optout, 'o1-s0', T(DAY), env)).reason, 'opted_out');
