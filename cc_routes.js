@@ -1815,7 +1815,7 @@ module.exports = function mountCcRoutes(app, deps) {
       const r = await require('./lib/waBridge').result(db, req.body);
       // A Confirm tap puts the "confirmed" tag on the Shopify order at once (the 2-minute retry job in cron_jobs.js stays as the safety net), the same as a caller's confirm.
       if (r.body && r.body.applied === 'confirmed_order' && typeof syncConfirmedTag === 'function') {
-        dbOne('SELECT o.id, o.shopify_order_id FROM wa_messages m JOIN orders_master o ON o.id = m.order_id WHERE m.send_id = $1', [String((req.body || {}).send_id || '')])
+        dbOne('SELECT id, shopify_order_id FROM orders_master WHERE id = $1', [r.order_id])
           .then(o => o && o.shopify_order_id ? syncConfirmedTag(o.id, o.shopify_order_id) : null).catch(e => console.error('[Shopify] WhatsApp syncConfirmedTag error:', e.message));
       }
       res.status(r.status).json(r.body);
