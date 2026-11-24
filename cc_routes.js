@@ -359,6 +359,7 @@ module.exports = function mountCcRoutes(app, deps) {
       // Input checks that need no database
       let cancelReasonText = null;
       let callbackWhen = null;
+      let confirmedByFix = false;      // owner 2026-11-24: fixing the address on a pending order IS a confirmation (the customer gave the right address and the order ships)
       if (disposition === 'cancelled') {
         if (!cfg.CANCEL_REASONS[reason_code]) throw new HttpError(400, 'Select a cancel reason');
         if (reason_code === 'other' && !note) throw new HttpError(400, 'Please add a note for reason "Other"');
@@ -425,7 +426,11 @@ module.exports = function mountCcRoutes(app, deps) {
               [order_id, agent.display_name, callbackWhen, note || null]);
             break;
           case 'address_fix':
-            await q(`UPDATE orders_master SET shipping_address1 = $3, address_fixed = TRUE, address_is_short = FALSE, ${base}${clearCb} WHERE id = $1`,
+            confirmedByFix = order.confirmation_status === 'pending';
+            await q(`UPDATE orders_master SET shipping_address1 = $3, address_fixed = TRUE, address_is_short = FALSE,
+                       confirmed_at = CASE WHEN confirmation_status = 'pending' THEN NOW() ELSE confirmed_at END,
+                       confirmation_status = CASE WHEN confirmation_status = 'pending' THEN 'confirmed' ELSE confirmation_status END,
+                       ${base}${clearCb} WHERE id = $1`,
               [order_id, agent.display_name, clean(new_address, 500)]);
             break;
           case 'wrong_number':
@@ -451,6 +456,7 @@ module.exports = function mountCcRoutes(app, deps) {
         await q(`SELECT log_status_change($1, $2, $3, $4, $5, $6)`,
           [order_id, disposition, order.confirmation_status, disposition === 'confirmed' ? 'confirmed' : disposition,
             agent.display_name, cancelReasonText || note || null]);
+        if (confirmedByFix) await q(`SELECT log_status_change($1, 'confirmed', 'pending', 'confirmed', $2, $3)`, [order_id, agent.display_name, 'Address fixed and order confirmed']);
 
         if (disposition === 'dnp') {
           const times = (await q(`SELECT created_at FROM lead_call_log WHERE order_id = $1 AND disposition = 'dnp'`, [order_id]))
@@ -462,16 +468,16 @@ module.exports = function mountCcRoutes(app, deps) {
 
       // Side effects after commit (same behaviour as the in-house flow)
       const { order, dnpInfo } = result;
-      if (disposition === 'confirmed') {
+      if (disposition === 'confirmed' || confirmedByFix) {
         db('SELECT maybe_promote_to_repeat_queue($1)', [order.customer_phone]).catch(e => console.error(e.message));
       }
       // A confirmation from the call-centre screen must reach Shopify at once (the "confirmed" tag); the 2-minute retry job in cron_jobs.js covers any failure.
-      if (disposition === 'confirmed' && typeof syncConfirmedTag === 'function') Promise.resolve(syncConfirmedTag(order_id, order.shopify_order_id)).catch(e => console.error('[Shopify] syncConfirmedTag error:', e.message));
+      if ((disposition === 'confirmed' || confirmedByFix) && typeof syncConfirmedTag === 'function') Promise.resolve(syncConfirmedTag(order_id, order.shopify_order_id)).catch(e => console.error('[Shopify] syncConfirmedTag error:', e.message));
       if (disposition === 'cancelled') cancelShopifyOrder(order.shopify_order_id, cancelReasonText, order_id);
       if (disposition === 'address_fix') updateShopifyShippingAddress(order.shopify_order_id, clean(new_address, 500), order_id);
-      writeDispositionToSheet(order.shopify_order_number, SHEET_LABEL[disposition], agent.display_name, (order.call_attempts || 0) + 1)
+      writeDispositionToSheet(order.shopify_order_number, SHEET_LABEL[confirmedByFix ? 'confirmed' : disposition], agent.display_name, (order.call_attempts || 0) + 1)
         .catch(err => console.error('[Sheet Write] background error:', err.message));
-      writeDispositionToNewSheet(order.shopify_order_number, SHEET_LABEL[disposition], agent.display_name, (order.call_attempts || 0) + 1)
+      writeDispositionToNewSheet(order.shopify_order_number, SHEET_LABEL[confirmedByFix ? 'confirmed' : disposition], agent.display_name, (order.call_attempts || 0) + 1)
         .catch(err => console.error('[New Sheet Write] background error:', err.message));
 
       res.json({ success: true, disposition, dnp: dnpInfo, callback_at: callbackWhen });

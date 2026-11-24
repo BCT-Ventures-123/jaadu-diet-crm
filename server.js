@@ -1260,16 +1260,23 @@ app.post('/api/lead/disposition', async (req, res) => {
 
       case 'address_fix':
         if (!new_address) return res.status(400).json({ error: 'new_address required' });
+        const fixConfirms = order.confirmation_status === 'pending';      // owner 2026-11-24: fixing the address on a pending order IS a confirmation
         await db(`
           UPDATE orders_master SET
             shipping_address1 = $2, address_fixed = TRUE,
             address_is_short = FALSE,
+            confirmed_at = CASE WHEN confirmation_status = 'pending' THEN NOW() ELSE confirmed_at END,
+            confirmation_status = CASE WHEN confirmation_status = 'pending' THEN 'confirmed' ELSE confirmation_status END,
             assigned_agent = $3, call_attempts = call_attempts + 1, last_call_at = NOW(),
             lead_locked_by = NULL, lead_locked_at = NULL
           WHERE id = $1
         `, [order_id, new_address, agent]);
         await db(`SELECT log_status_change($1, 'address_fixed', $2, $3, $4, 'Address corrected by agent')`,
           [order_id, order.shipping_address1, new_address, agent]);
+        if (fixConfirms) {
+          await db(`SELECT log_status_change($1, 'confirmed', 'pending', 'confirmed', $2, $3)`, [order_id, agent, 'Address fixed and order confirmed']);
+          syncConfirmedTag(order_id, order.shopify_order_id).catch(e => console.error('[Shopify] syncConfirmedTag error:', e.message));
+        }
         updateShopifyShippingAddress(order.shopify_order_id, new_address, order_id);
         break;
 
