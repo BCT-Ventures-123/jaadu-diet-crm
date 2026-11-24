@@ -169,6 +169,24 @@ test('wa result: Confirm on an order someone else already finished changes nothi
   assert.equal(r.body.applied, 'order_not_pending'); assert.equal(db.log.filter(l => /log_status_change/.test(l.sql)).length, 0);
 });
 
+test('wa result: a tap on an OLD message (only the Shopify order id) is found by that id and handled like any other tap', async () => {
+  wa._reset();
+  let confirmed = false;
+  const byShopify = () => [{ id: 'o1', order_name: '#40001', phone10: '9876543210' }];
+  const db = fakeDb({ 'FROM orders_master WHERE shopify_order_id': byShopify, 'INSERT INTO wa_events': () => [{ id: 7 }], "SET confirmation_status = 'confirmed'": () => { confirmed = true; return [{ id: 'o1' }]; } });
+  const r = await wa.result(db, { send_id: 'legacy-1234567890', shopify_order_id: '1234567890', event: 'clicked_confirm', provider_message_id: 'wamid.tap1' });
+  assert.equal(r.status, 200); assert.equal(r.body.applied, 'confirmed_order'); assert.equal(r.body.order_name, '#40001'); assert.equal(r.order_id, 'o1'); assert.ok(confirmed);
+  assert.ok(db.log.some(l => /INSERT INTO wa_events/.test(l.sql) && l.p[1] === 'legacy-1234567890' && l.p[2] === 'o1'));
+  // Cancel and Change address from an old message: a person calls back, nothing is cancelled
+  const db2 = fakeDb({ 'FROM orders_master WHERE shopify_order_id': byShopify, 'INSERT INTO wa_events': () => [{ id: 8 }], 'SET callback_at = NOW': () => [{ id: 'o1' }] });
+  const c = await wa.result(db2, { send_id: 'legacy-1234567890', shopify_order_id: '1234567890', event: 'clicked_cancel', provider_message_id: 'wamid.tap2' });
+  assert.equal(c.body.applied, 'followup_set'); assert.equal(db2.log.filter(l => /confirmation_status = 'cancelled'/.test(l.sql)).length, 0);
+  // an unknown order, or a bad id, or an event that is not a tap: nothing happens
+  assert.equal((await wa.result(fakeDb(), { send_id: 'legacy-999999', shopify_order_id: '999999', event: 'clicked_confirm' })).status, 404);
+  assert.equal((await wa.result(fakeDb({ 'FROM orders_master WHERE shopify_order_id': byShopify }), { send_id: 'x', shopify_order_id: '12; DROP', event: 'clicked_confirm' })).status, 404);
+  assert.equal((await wa.result(fakeDb({ 'FROM orders_master WHERE shopify_order_id': byShopify }), { send_id: 'x', shopify_order_id: '1234567890', event: 'sent' })).status, 404);
+});
+
 test('wa result: Cancel and Change address never change the order, they ask a person to call', async () => {
   wa._reset();
   for (const ev of ['clicked_cancel', 'clicked_change_address']) {
