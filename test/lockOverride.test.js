@@ -53,7 +53,9 @@ test('one owner per lead: a person cannot take over a lead while its IVR call is
 });
 
 test('Shopify: a confirmation from the call-centre screen is tagged on Shopify at once, and the status route exists', () => {
-  assert.match(src, /disposition === 'confirmed' && typeof syncConfirmedTag === 'function'/);
+  assert.match(src, /\(disposition === 'confirmed' \|\| confirmedByFix\) && typeof syncConfirmedTag === 'function'/);
+  assert.match(src, /confirmedByFix = order\.confirmation_status === 'pending'/);                                      // owner 2026-11-24: fixing the address on a pending order confirms it
+  assert.match(src, /confirmation_status = CASE WHEN confirmation_status = 'pending' THEN 'confirmed' ELSE confirmation_status END/);
   assert.match(src, /app\.get\('\/api\/cc\/shopify-sync'/);
   const srv = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   assert.match(srv, /updateShopifyShippingAddress, syncConfirmedTag \}\);/);

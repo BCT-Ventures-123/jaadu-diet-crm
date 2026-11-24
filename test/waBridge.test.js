@@ -169,6 +169,18 @@ test('wa result: Confirm on an order someone else already finished changes nothi
   assert.equal(r.body.applied, 'order_not_pending'); assert.equal(db.log.filter(l => /log_status_change/.test(l.sql)).length, 0);
 });
 
+test('wa result: a tap on an order that is no longer pending changes nothing and says where the order stands (confirmed, shipped, cancelled)', async () => {
+  const stateOf = (row) => fakeDb({ 'FROM wa_messages WHERE send_id': () => [msg({ status: 'sent' })], 'INSERT INTO wa_events': () => [{ id: 9 }], 'SELECT confirmation_status, order_status FROM orders_master': () => [row] });
+  for (const [row, want] of [[{ confirmation_status: 'confirmed', order_status: 'pending' }, 'confirmed'], [{ confirmation_status: 'confirmed', order_status: 'shipped' }, 'shipped'],
+                            [{ confirmation_status: 'cancelled', order_status: 'cancelled' }, 'cancelled'], [{ confirmation_status: 'confirmed', order_status: 'out_for_delivery' }, 'shipped']]) {
+    wa._reset();
+    const db = stateOf(row);
+    const r = await wa.result(db, { send_id: 'o1-s0', event: 'clicked_cancel', provider_message_id: 'wamid.x' + want });
+    assert.equal(r.body.applied, 'order_not_pending'); assert.equal(r.body.order_state, want);
+    assert.equal(db.log.filter(l => /SET callback_at/.test(l.sql) && l.p && l.p[0] === 'o1' && /RETURNING/.test(l.sql)).length, 1);   // the guarded UPDATE ran, but only touches a pending order
+  }
+});
+
 test('wa result: a tap on an OLD message (only the Shopify order id) is found by that id and handled like any other tap', async () => {
   wa._reset();
   let confirmed = false;
