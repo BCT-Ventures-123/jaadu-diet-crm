@@ -237,9 +237,11 @@
   // Confirmation by order age: each day judged at the same age.
   function ageHtml(L) {
     var days = (L.age || []).slice(-14); if (!days.length) return '';
-    var c = function (n, of, p) { return of ? cell(n, p) : '—'; };
-    return '<h3>Confirmation by order age</h3><div class="hm-sub">Each day is judged at the same age, so a recent day is not unfairly compared with an old one. An order too young for a column is left out of it, not counted as a failure.</div>' +
-      table(['Order date', 'Orders', 'Confirmed within 2 hours', 'Confirmed within 24 hours', 'Confirmed within 48 hours', 'Cancelled within 48 hours'], days.map(function (d) { return [dayLabel(d.day), num(d.orders), c(d.h2, d.h2_of, d.h2_pct), c(d.h24, d.h24_of, d.h24_pct), c(d.h48, d.h48_of, d.h48_pct), num(d.cancelled_h48)]; }));
+    // Owner 2026-11-25: the base is ALL the day's COD orders. The old table left out the orders that were still open and too young for the column, so a day showed 98 percent while only 77 percent of its orders were confirmed.
+    // Now every percentage is of all the day's orders; a column the day has not finished yet says "so far" (it can still rise).
+    var c = function (n, of, d) { var p = d.orders ? Math.round(n * 1000 / d.orders) / 10 : null; return cell(n, p) + (of < d.orders ? ' <small style="color:var(--ds-muted)">so far</small>' : ''); };
+    return '<h3>Confirmation by order age</h3><div class="hm-sub">Every percentage is of <b>all the COD orders of that day</b>. "Confirmed within 24 hours" counts the orders confirmed in their first 24 hours; a column marked <i>so far</i> is not finished yet (the day is younger than that), so it can still rise. Open orders are never left out.</div>' +
+      table(['Order date', 'COD orders', 'Confirmed within 2 hours', 'Confirmed within 24 hours', 'Confirmed within 48 hours', 'Cancelled within 48 hours'], days.map(function (d) { return [dayLabel(d.day), num(d.orders), c(d.h2, d.h2_of, d), c(d.h24, d.h24_of, d), c(d.h48, d.h48_of, d), num(d.cancelled_h48)]; }));
   }
   // The CRM against Shopify, last 3 days.
   function shopifyHtml(Sh) {
