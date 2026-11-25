@@ -1586,8 +1586,8 @@ module.exports = function mountCcRoutes(app, deps) {
         messaged = (await dbOne(`SELECT COUNT(DISTINCT order_id)::int AS n FROM wa_messages WHERE order_id = ANY($1) AND step <= 4 AND NOT is_test AND sent_at IS NOT NULL`, [ids])).n || 0;
         confirmedByWa = (await dbOne(`SELECT COUNT(DISTINCT order_id)::int AS n FROM wa_events WHERE order_id = ANY($1) AND event = 'clicked_confirm' AND applied = 'confirmed_order'`, [ids])).n || 0;
       }
-      let shipping = []; try { shipping = await require('./lib/waNotify').report(db, r.from, r.to); } catch (e) { console.error('[WA] shipping report failed:', e.message); }
-      res.json({ from: r.from, to: r.to, orders: rows.length, orders_messaged: messaged, orders_messaged_pct: rows.length ? Math.round(messaged * 1000 / rows.length) / 10 : null, confirmed_by_whatsapp: confirmedByWa, shipping,
+      let shipping = [], shipReplies = []; try { const nfy = require('./lib/waNotify'); shipping = await nfy.report(db, r.from, r.to); shipReplies = await nfy.replies(db, r.from, r.to); } catch (e) { console.error('[WA] shipping report failed:', e.message); }
+      res.json({ from: r.from, to: r.to, orders: rows.length, orders_messaged: messaged, orders_messaged_pct: rows.length ? Math.round(messaged * 1000 / rows.length) / 10 : null, confirmed_by_whatsapp: confirmedByWa, shipping, ship_replies: shipReplies,
         bridge_has_data: steps.length > 0, steps: steps.map(s => ({ ...s, label: LABEL[s.step] || ('Message ' + (s.step + 1)), no_response: Math.max(0, s.sent - Math.max(s.confirm + s.cancel + s.change_address, s.replied)) })) });
     } catch (err) { sendError(res, err); }
   });  app.get('/api/cc/lead-audit', async (req, res) => {
