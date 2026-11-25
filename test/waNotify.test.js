@@ -160,14 +160,13 @@ test('check: the 2nd out-for-delivery message waits for its 2 hours even if the 
   assert.equal((await wa.check(due, 'o1-ofd_2', T(NOON), ENV)).send, true);
 });
 
-test('result: delivery-failed replies give the order a callback; the out-for-delivery tap is only recorded; both are stored once', async () => {
+test('result: delivery-failed and out-for-delivery taps are only recorded (the old flow answers them); nothing on the order changes; stored once', async () => {
   wa._reset(); nf._reset();
   const m = { send_id: 'o1-ndr_1', order_id: 'o1', order_name: '#44153', phone10: '9702009999', step: 13, is_test: false };
   const db = fakeDb({ 'SELECT \\* FROM wa_messages WHERE send_id': () => [m], 'INSERT INTO wa_events': () => [{ id: 1 }], 'UPDATE orders_master SET callback_at': () => [{ id: 'o1' }] });
   const r = await wa.result(db, { send_id: 'o1-ndr_1', event: 'clicked_ndr_yes', provider_message_id: 'wamid.1', at: NOON });
-  assert.equal(r.status, 200); assert.equal(r.body.applied, 'followup_set');
-  const cb = db.log.find(l => /UPDATE orders_master SET callback_at/.test(l.sql)); assert.ok(/WERE available/.test(cb.p[1]));
-  assert.ok(!db.log.some(l => /confirmation_status = 'confirmed'/.test(l.sql)));                                                      // a shipping reply never changes the confirmation
+  assert.equal(r.status, 200); assert.equal(r.body.applied, 'recorded');
+  assert.ok(!db.log.some(l => /UPDATE orders_master/.test(l.sql)));                                                                   // a shipping reply changes nothing on the order
   const alt = await wa.result(fakeDb({ 'SELECT \\* FROM wa_messages WHERE send_id': () => [{ ...m, send_id: 'o1-ofd_1', step: 11 }], 'INSERT INTO wa_events': () => [{ id: 2 }] }), { send_id: 'o1-ofd_1', event: 'clicked_ofd_alt', provider_message_id: 'wamid.2' });
   assert.equal(alt.body.applied, 'recorded');
   const dup = fakeDb({ 'SELECT \\* FROM wa_messages WHERE send_id': () => [m], 'INSERT INTO wa_events': () => [] });
