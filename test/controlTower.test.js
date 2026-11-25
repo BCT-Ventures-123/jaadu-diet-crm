@@ -22,7 +22,7 @@ test('stages: counts and percentages come from the day totals', () => {
 test('actions: ranked, worst first, and earlier-day misses are separate from today', () => {
   const t = buildControlTower({ e2e, team, ship: { overdue: 3, due_today: 5, blocked: 2, wrong: 1 }, today: '2026-11-17' });
   assert.strictEqual(t.actions[0].level, 'bad');
-  assert.ok(t.actions.some(a => /earlier days were never called/.test(a.text) && /^4 /.test(a.text)));
+  assert.ok(t.actions.some(a => /earlier days were never tried/.test(a.text) && /^4 /.test(a.text)));
   assert.ok(t.actions.some(a => /^6 of today/.test(a.text)));
   assert.ok(t.actions.some(a => /Aman: Aman missed leads/.test(a.text)));
   assert.ok(!t.actions.some(a => /slow/.test(a.text)));
