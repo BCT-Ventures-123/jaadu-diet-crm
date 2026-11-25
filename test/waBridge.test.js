@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const wa = require('../lib/waBridge');
 
-const S = wa.settings({ WA_MODE: 'on', WA_GO_LIVE: '2026-11-20T00:00:00Z', WA_SHARED_KEY: 'k', IVR_TEST_NUMBERS: '9076219087,8459803501', WA_ENABLED_KEYS: 'confirm,reminder_1,reminder_2,reminder_3', WA_MAX_REMINDERS: '3' });   // the engine still supports 3 reminders; the DEFAULT is 2 (three messages a day)
+const S = wa.settings({ WA_MODE: 'on', WA_GO_LIVE: '2026-11-20T00:00:00Z', WA_SHARED_KEY: 'k', IVR_TEST_NUMBERS: '9076219087,8459803501', WA_ENABLED_KEYS: 'confirm,reminder_1,reminder_2,reminder_3,reminder_4', WA_MAX_REMINDERS: '3' });   // same-day reminders are capped at 2 (three messages a day); steps 3 and 4 are the next-morning messages
 const T = (s) => new Date(s);
 const DAY = '2026-11-21T06:30:00Z';        // 12:00 noon in India
 const NIGHT = '2026-11-21T17:00:00Z';      // 22:30 in India
@@ -13,9 +13,11 @@ test('wa settings: modes, tolerant values, safe defaults', () => {
   for (const v of ['on', 'ON', ' "on" ', 'true', '1', 'yes']) assert.equal(wa.settings({ WA_MODE: v }).mode, 'on');
   assert.equal(wa.settings({ WA_MODE: 'test' }).mode, 'test'); assert.equal(wa.settings({ WA_MODE: 'maybe' }).mode, 'off');
   const d = wa.settings({});
-  assert.deepEqual(d.enabledKeys, ['confirm', 'reminder_1', 'reminder_2']);   // all three messages use the approved confirm template
+  assert.deepEqual(d.enabledKeys, ['confirm', 'reminder_1', 'reminder_2', 'reminder_3', 'reminder_4']);   // all five messages use the approved confirm template
+  assert.equal(d.followups, 2); assert.equal(d.dayHourFixed, null); assert.equal(d.followupMaxAgeDays, 4); assert.equal(d.followupPace, 20);
+  assert.equal(wa.settings({ WA_DAY_HOUR: '10' }).dayHourFixed, 10); assert.equal(wa.settings({ WA_DAY_HOUR: '3' }).dayHourFixed, 8); assert.equal(wa.settings({ WA_DAILY_FOLLOWUPS: '9' }).followups, 2);
   assert.equal(d.reminderHours, 4); assert.equal(d.maxReminders, 2); assert.equal(d.busyHoldMinutes, 30); assert.equal(d.holdMinutes, 0); assert.equal(d.quietFrom, 21); assert.equal(d.quietTo, 8); assert.equal(d.minAmount, 350);
-  assert.equal(wa.settings({ WA_MAX_REMINDERS: '9' }).maxReminders, 3);                       // never more than 3
+  assert.equal(wa.settings({ WA_MAX_REMINDERS: '9' }).maxReminders, 2);                       // never more than 2 same-day reminders (3 messages a day)
   assert.deepEqual(S.testNumbers, ['9076219087', '8459803501']);
   assert.equal(wa.settings({ WA_GO_LIVE: 'garbage' }).goLive, null);
 });
@@ -53,8 +55,18 @@ test('wa decide: reminders come 4 hours after the previous message was SENT, at 
   const w = wa.decide(sent(0, '2026-11-21T04:00:00Z'), T('2026-11-21T07:59:00Z'), S); assert.equal(w.action, 'wait'); assert.equal(w.reason, 'not_yet');
   const r1 = wa.decide(sent(0, '2026-11-21T04:00:00Z'), T('2026-11-21T08:00:00Z'), S); assert.equal(r1.action, 'offer'); assert.equal(r1.step, 1); assert.equal(r1.template_key, 'reminder_1');
   assert.equal(wa.decide(sent(1, '2026-11-21T04:00:00Z'), T('2026-11-21T08:00:00Z'), S).template_key, 'reminder_2');
-  assert.equal(wa.decide(sent(2, '2026-11-21T04:00:00Z'), T('2026-11-21T08:00:00Z'), S).template_key, 'reminder_3');
-  assert.equal(wa.decide(sent(3, '2026-11-20T04:00:00Z'), T('2026-11-21T08:00:00Z'), S).reason, 'all_reminders_sent');
+  const m1 = wa.decide(sent(2, '2026-11-21T04:00:00Z'), T('2026-11-21T08:00:00Z'), S); assert.equal(m1.action, 'wait'); assert.equal(m1.reason, 'next_morning'); assert.equal(m1.not_before.toISOString(), '2026-11-22T03:30:00.000Z');   // 9 AM India, at least 16 h after the last message
+  assert.equal(wa.decide(sent(2, '2026-11-21T04:00:00Z'), T('2026-11-22T03:29:00Z'), S).action, 'wait');
+  const m4 = wa.decide(sent(2, '2026-11-21T04:00:00Z'), T('2026-11-22T03:30:00Z'), S); assert.equal(m4.action, 'offer'); assert.equal(m4.step, 3); assert.equal(m4.template_key, 'reminder_3'); assert.equal(m4.reason, 'next_morning');
+  const m5 = wa.decide(sent(3, '2026-11-22T03:30:00Z'), T('2026-11-23T03:30:00Z'), S); assert.equal(m5.action, 'offer'); assert.equal(m5.step, 4); assert.equal(m5.template_key, 'reminder_4');
+  assert.equal(wa.decide(sent(3, '2026-11-22T03:30:00Z'), T('2026-11-23T03:29:00Z'), S).action, 'wait');
+  assert.equal(wa.decide(sent(4, '2026-11-23T03:30:00Z'), T('2026-11-24T03:30:00Z'), S).reason, 'all_followups_sent');                                          // never a sixth message
+  assert.equal(wa.decide(sent(2, '2026-11-21T04:00:00Z'), T('2026-11-22T03:30:00Z'), wa.settings({ WA_MODE: 'on', WA_ENABLED_KEYS: 'confirm,reminder_1,reminder_2', WA_DAILY_FOLLOWUPS: '0' })).reason, 'all_followups_sent');   // switched off
+  assert.equal(wa.decide({ ...sent(2, '2026-11-25T04:00:00Z'), created_at: '2026-11-21T06:30:00Z' }, T('2026-11-26T03:30:00Z'), S).reason, 'too_old');          // an order older than 4 days is left to the callers and the IVR
+  const eleven = wa.settings({ WA_MODE: 'on', WA_DAY_HOUR: '11', WA_ENABLED_KEYS: 'confirm,reminder_1,reminder_2,reminder_3' }); eleven.dayHour = eleven.dayHourFixed;      // a fixed hour of 11 AM India = 05:30 UTC
+  assert.equal(wa.decide(sent(2, '2026-11-21T04:00:00Z'), T('2026-11-22T05:29:00Z'), eleven).action, 'wait');
+  assert.equal(wa.decide(sent(2, '2026-11-21T04:00:00Z'), T('2026-11-22T05:30:00Z'), eleven).action, 'offer');
+  assert.equal(wa.nextMorning(Date.parse('2026-11-21T04:00:00Z'), { dayHour: 11 }).toISOString(), '2026-11-22T05:30:00.000Z');
   const lim = wa.settings({ WA_MAX_REMINDERS: '1' }); assert.equal(wa.decide(sent(1, '2026-11-20T04:00:00Z'), T('2026-11-21T08:00:00Z'), lim).reason, 'all_reminders_sent');
   const q = wa.decide(sent(0, '2026-11-21T10:00:00Z'), T('2026-11-21T16:00:00Z'), S); assert.equal(q.reason, 'quiet_hours');   // due at 14:00 UTC, asked at 21:30 IST
 });
@@ -317,7 +329,7 @@ test('task 2: three messages a day by default (now, +4 h, +8 h), and the 30-minu
   assert.equal(wa.decide(sent(0, 3), T(DAY), d).action, 'wait');                                              // not yet 4 hours
   assert.equal(wa.decide(sent(0, 4), T(DAY), d).template_key, 'reminder_1');                                  // message 2, 4 hours later
   assert.equal(wa.decide(sent(1, 4), T(DAY), d).template_key, 'reminder_2');                                  // message 3, 4 hours after that
-  assert.deepEqual(wa.decide(sent(2, 5), T(DAY), d), { action: 'stop', reason: 'all_reminders_sent' });       // never a fourth
+  assert.equal(wa.decide(sent(2, 5), T(DAY), d).reason, 'next_morning');                                      // the next message waits for the next morning, never a fourth the same day
   // the head start: busy or absent team = 30 minutes; spare time = no hold, the caller calls in parallel
   const busy = { cc: { active_agents: 3, uncalled: 80, capacity: 40 }, aman: { active_agents: 1, uncalled: 5, capacity: 30 } };
   assert.equal(wa.holdMinutes('CC', busy, d), 30); assert.equal(wa.holdMinutes('InHouse', busy, d), 0);        // the call centre is behind, Aman has spare time
@@ -340,4 +352,32 @@ test('task 2: the first message locks the lead for the callers 30 minutes when t
   const lock = await run([], []);                                                                           // nobody is logged in: busy, WhatsApp goes first
   assert.ok(lock); assert.equal(lock.p[1].toISOString(), '2026-11-21T06:45:00.000Z');                       // 06:30 + (30 - 15): the callers see it from 07:00
   assert.equal(await run(working, []), undefined);                                                          // callers are working and have nothing waiting: they call in parallel, no lock
+});
+test('wa next morning: the hour is learned from the customers (9 to 13, at least 30 messages), 9 AM without data, and the messages are paced', async () => {
+  wa._reset();
+  const rows = [{ hour: 9, sent: 40, tapped: 4 }, { hour: 10, sent: 50, tapped: 10 }, { hour: 11, sent: 20, tapped: 9 }, { hour: 15, sent: 100, tapped: 60 }];
+  const db = fakeDb({ 'FROM wa_messages m WHERE NOT m.is_test': () => rows });
+  const l = await wa.learnedDayHour(db, T('2026-11-23T05:00:00Z')); assert.equal(l.hour, 10); assert.equal(l.learned, true); assert.equal(l.table.find(x => x.hour === 10).rate, 20);   // 11 AM has too few messages, 3 PM is too late to ship the same day
+  await wa.learnedDayHour(db, T('2026-11-23T06:00:00Z')); assert.equal(db.log.filter(x => /FROM wa_messages m WHERE NOT m.is_test/.test(x.sql)).length, 1);   // cached for 6 hours
+  wa._reset();
+  const none = await wa.learnedDayHour(fakeDb({ 'FROM wa_messages m WHERE NOT m.is_test': () => [{ hour: 9, sent: 5, tapped: 5 }] }), T('2026-11-23T05:00:00Z')); assert.equal(none.hour, 9); assert.equal(none.learned, false);
+
+  wa._reset();
+  const env = { WA_MODE: 'on', WA_GO_LIVE: '2026-11-20T00:00:00Z', WA_FOLLOWUP_PACE: '3', WA_DAY_HOUR: '9' };
+  const orders = Array.from({ length: 10 }, (_, i) => order({ id: 'o' + i, order_name: '#4000' + i, last_step: 2, last_status: 'sent', last_sent_at: '2026-11-22T06:00:00Z', created_at: '2026-11-21T06:00:00Z', phone: '98765432' + String(10 + i) }));
+  const q = fakeDb({ 'FROM orders_master o': () => orders, 'INSERT INTO wa_messages': () => [{ send_id: 'x' }] });
+  const out = await wa.queue(q, T('2026-11-23T05:00:00Z'), env);
+  assert.equal(out.items.length, 3);                                                         // paced: 3 per poll, never a burst
+  assert.ok(out.items.every(i => i.step === 3 && i.template_key === 'reminder_3'));
+  // before the morning hour nothing goes
+  wa._reset();
+  assert.equal((await wa.queue(fakeDb({ 'FROM orders_master o': () => orders, 'INSERT INTO wa_messages': () => [{ send_id: 'x' }] }), T('2026-11-23T03:00:00Z'), env)).items.length, 0);
+});
+
+test('wa next morning: only in the morning window, never in the afternoon or evening', () => {
+  const sent = { ...base, last_step: 2, last_status: 'sent', last_sent_at: '2026-11-21T04:00:00Z' };
+  assert.equal(wa.decide(sent, T('2026-11-22T07:29:00Z'), S).action, 'offer');                       // 12:59 India: still the morning window (9 AM + 4 h)
+  const late = wa.decide(sent, T('2026-11-22T07:30:00Z'), S); assert.equal(late.action, 'wait'); assert.equal(late.reason, 'morning_only');   // 1 PM India: waits for tomorrow
+  assert.equal(wa.decide(sent, T('2026-11-22T13:00:00Z'), S).reason, 'morning_only');                // 6:30 PM
+  assert.equal(wa.decide(sent, T('2026-11-23T03:30:00Z'), S).action, 'offer');                       // next day 9 AM: goes
 });

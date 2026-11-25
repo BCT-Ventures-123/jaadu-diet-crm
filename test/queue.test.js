@@ -137,3 +137,18 @@ test('4 tries by the callers: the lead leaves their queue and the IVR takes it; 
   assert.equal(cb.priority.tier, 'callback_due');                                                                  // a customer promised a call is never dropped
   assert.ok(prioritise.length >= 1); assert.ok(require('../lib/queue').TIER_ORDER.includes('to_ivr'));
 });
+test('warm leads (the customer read the WhatsApp message and tapped nothing) are called first inside their tier, never above a higher tier', async () => {
+  const q = sortQueue([lead('cold', 300), lead('warm', 300, [], { wa_warm: true }), lead('retryCold', 300, [200]), lead('retryWarm', 300, [200], { wa_warm: true }), lead('callback', 500, [], { callback_at: minsAgo(25) }), lead('newCold', 20)]);
+  const ids = q.map(l => l.id);
+  assert.ok(ids.indexOf('warm') < ids.indexOf('cold'));                  // same tier (fresh): warm first
+  assert.ok(ids.indexOf('retryWarm') < ids.indexOf('retryCold'));        // same tier (retry): warm first
+  assert.ok(ids.indexOf('callback') < ids.indexOf('warm'));              // a promised callback is still first
+  assert.ok(ids.indexOf('cold') < ids.indexOf('retryWarm'));             // warm never lifts a retry above a fresh lead
+  assert.match(q.find(l => l.id === 'warm').priority.reason, /Warm: the customer read the WhatsApp message/);
+  assert.doesNotMatch(q.find(l => l.id === 'cold').priority.reason, /Warm/);
+  const { warmIds } = require('../lib/warmLeads');
+  const db = async (sql, p) => { assert.match(sql, /read_at IS NOT NULL/); assert.match(sql, /NOT EXISTS/); return [{ order_id: 'a' }]; };
+  assert.deepEqual([...(await warmIds(db, ['a', 'b']))], ['a']);
+  assert.equal((await warmIds(async () => { throw new Error('no table'); }, ['a'])).size, 0);   // tables missing: nobody is warm, the queue works as before
+  assert.equal((await warmIds(db, [])).size, 0);
+});
