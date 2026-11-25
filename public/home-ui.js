@@ -288,6 +288,18 @@
     return '<h3>' + esc(title || 'Day by day') + '</h3><div class="hm-sub">The same dates as the filter above. Every percentage is a share of that day\'s orders, and the days add up to the Total row.</div>' +
       table(['Order date', 'Leads', 'Attempted', 'Connected', 'Not connected', 'Not attempted', 'Confirmed', 'Cancelled', 'Not confirmed'], rows.map(function (d) { return line(dayLabel(d.day), d); }).concat([line('Total', tot, 'tot')]));
   }
+  // Road to 95% (lib/road95.js): every day's orders must reach 95 percent confirmed, and each day has 5 days to get there.
+  function roadHtml(R) {
+    if (!R || !R.days || !R.days.length) return '';
+    var st = { on_target: '<b style="color:var(--ds-brand)">On target</b>', in_progress: 'Working on it', missed: '<b style="color:var(--ds-danger)">Below 95%</b>' };
+    var rows = R.days.map(function (d) { return [dayLabel(d.day), num(d.orders), cell(d.confirmed, d.confirmed_pct), cell(d.cancelled, d.cancelled_pct), cell(d.open, d.open_pct), d.days_left ? num(d.days_left) + (d.days_left === 1 ? ' day' : ' days') : 'closed', d.need ? '<b>' + num(d.need) + '</b>' : '0', st[d.state] || '']; });
+    var b = R.stuck.buckets;
+    var list = (R.stuck.list || []).slice(0, 15).map(function (x) { var t = x.tries; return [esc(x.order), dayLabel(x.day), num(x.waiting_hours) + ' h', num(x.attempts), 'A ' + num(t.aman) + ' · C ' + num(t.cc) + ' · I ' + num(t.ivr) + ' · W ' + num(t.wa), x.last_try_by ? esc(x.last_try_by) + (x.last_try_hours_ago != null ? ', ' + num(x.last_try_hours_ago) + ' h ago' : '') : 'nobody yet']; });
+    return '<h3>Road to ' + R.target + '%: every day\'s orders</h3><div class="hm-sub">Each day\'s orders must reach <b>' + R.target + '% confirmed</b> within ' + R.mature_days + ' days. "Needs" is how many more confirmations that day still needs. The last 7 days, all channels.</div>' +
+      table(['Order date', 'Orders', 'Confirmed', 'Cancelled', 'Still open', 'Days left', 'Needs', 'State'], rows, ['l', 'r', 'r', 'r', 'r', 'r', 'r', 'm']) +
+      '<div class="hm-sub"><b>' + num(R.stuck.total) + '</b> orders are still open: <b>' + num(b.none) + '</b> with no try, <b>' + num(b.one) + '</b> with one try, <b>' + num(b.two_three) + '</b> with 2 or 3 tries, <b>' + num(b.four_plus) + '</b> with 4 or more. The longest waiting first (A = Aman, C = call centre, I = IVR, W = WhatsApp, tries per channel):</div>' +
+      (list.length ? table(['Order', 'Placed', 'Waiting', 'Tries', 'By channel', 'Last try'], list, ['l', 'l', 'r', 'r', 'l', 'l']) : '');
+  }
   // The end-to-end check: real orders confirmed in the last 36 hours, followed from the channel that confirmed them to the report, the attempts log, the logistics gate and Shopify.
   function pipelineHtml(P) {
     if (!P) return '';
@@ -340,7 +352,7 @@
     if (!F) return NO_FUNNEL;
     var a = T.aman, c = T.cc;
     var Ld = S.ledger;
-    var h = (Ld ? checksHtml(Ld) + cancelAsksHtml(S.cancelAsks) + pipelineHtml(S.pipe) + codTable(Ld) + gridHtml(Ld) : funnelBlock(F, 'COD tea orders placed on the chosen dates', 'overall', breakdownHtml(T.funnel.breakdown, T.funnel))) + twoPmHtml(S.twoPm) + (Ld ? ageHtml(Ld) : '') + shopifyHtml(S.shop) + (Ld ? funnelBlock(F, '', 'overall', '', true) : '') + auditBlock(S.audit);
+    var h = (Ld ? checksHtml(Ld) + roadHtml(S.road) + cancelAsksHtml(S.cancelAsks) + pipelineHtml(S.pipe) + codTable(Ld) + gridHtml(Ld) : funnelBlock(F, 'COD tea orders placed on the chosen dates', 'overall', breakdownHtml(T.funnel.breakdown, T.funnel))) + twoPmHtml(S.twoPm) + (Ld ? ageHtml(Ld) : '') + shopifyHtml(S.shop) + (Ld ? funnelBlock(F, '', 'overall', '', true) : '') + auditBlock(S.audit);
     h += '<h3>Who confirmed the orders</h3><div class="hm-sub">Every COD order, whoever or whatever confirmed it. The IVR and WhatsApp are counted from the CRM, once.</div>' +
       table(['Channel', 'Confirmed', '% of orders', 'Share of confirmed', 'Cancelled'], C.channels.map(function (x) { return [esc(x.label), num(x.confirmed), pc(x.confirmed_pct_of_cod), pc(x.share_of_confirmed_pct), num(x.cancelled)]; }));
     var flags = (a.flags || []).map(function (f) { return { level: f.level, text: 'Aman: ' + f.text }; }).concat((c.flags || []).map(function (f) { return { level: f.level, text: 'Call centre: ' + f.text }; }));
@@ -444,7 +456,7 @@
     $('hm-root').innerHTML = '<div class="hm-load">Loading…</div>';
     var q = '?from=' + S.from + '&to=' + S.to;
     Promise.all([getJson('/api/cc/hour-curve').catch(function (e) { if (e.message === 'login') throw e; return null; }), getJson('/api/cc/team-report' + q), getJson('/api/cc/ivr-report' + q).catch(function (e) { if (e.message === 'login') throw e; return null; }), getJson('/api/cc/ivr-plan').catch(function (e) { if (e.message === 'login') throw e; return null; }), getJson('/api/cc/ivr/status').catch(function () { return null; }), getJson('/api/cc/lead-audit' + q).catch(function (e) { if (e.message === 'login') throw e; return null; }), getJson('/api/cc/two-pm?date=' + S.to).catch(function (e) { if (e.message === 'login') throw e; return null; }), getJson('/api/cc/wa-report' + q).catch(function (e) { if (e.message === 'login') throw e; return null; }), getJson('/api/cc/ledger' + q).catch(function (e) { if (e.message === 'login') throw e; return null; }), getJson('/api/cc/shopify-check').catch(function (e) { if (e.message === 'login') throw e; return null; }), getJson('/api/cc/cancel-requests').catch(function (e) { if (e.message === 'login') throw e; return null; })])
-      .then(function (r) { if (!S.pipeAsked) { S.pipeAsked = true; getJson('/api/cc/pipeline-check').then(function (j) { S.pipe = j; render(); }).catch(function () {}); } S.curve = r[0]; S.team = r[1]; S.ivr = r[2]; S.live = r[3]; S.recent = r[4] ? r[4].recent : null; S.audit = r[5]; S.twoPm = r[6]; S.wa = r[7]; S.ledger = r[8]; S.shop = r[9]; S.cancelAsks = r[10]; S.liveAt = new Date(); render(); })
+      .then(function (r) { getJson('/api/cc/road-to-95').then(function (j) { S.road = j; render(); }).catch(function () {}); if (!S.pipeAsked) { S.pipeAsked = true; getJson('/api/cc/pipeline-check').then(function (j) { S.pipe = j; render(); }).catch(function () {}); } S.curve = r[0]; S.team = r[1]; S.ivr = r[2]; S.live = r[3]; S.recent = r[4] ? r[4].recent : null; S.audit = r[5]; S.twoPm = r[6]; S.wa = r[7]; S.ledger = r[8]; S.shop = r[9]; S.cancelAsks = r[10]; S.liveAt = new Date(); render(); })
       .catch(function (e) { if (e.message !== 'login') $('hm-root').innerHTML = '<div class="hm-err">' + esc(e.message) + '</div>'; });
   }
 
