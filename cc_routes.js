@@ -1435,6 +1435,18 @@ module.exports = function mountCcRoutes(app, deps) {
         days: { total: require('./lib/ledger').byDay(L.led), aman: require('./lib/ledger').byDay(L.led, 'aman'), cc: require('./lib/ledger').byDay(L.led, 'cc') } });
     } catch (err) { sendError(res, err); }
   });
+  // Road to 95% (owner 2026-11-25): each of the last 7 days' orders, confirmed against the 95 percent goal, with the days each has left and the open orders still not reached (lib/road95.js).
+  async function loadRoad() {
+    const to = todayIst(), from = new Date(Date.parse(to + 'T00:00:00+05:30') - 6 * 86400e3).toLocaleDateString('en-CA', { timeZone: cfg.TIMEZONE });
+    const L = await loadLedger(parseRange({ from, to }), false);
+    return { ...require('./lib/road95').build(L.led, L.now), from, to, as_of: L.now.toISOString() };
+  }
+  app.get('/api/cc/road-to-95', async (req, res) => {
+    try {
+      if (!['admin', 'aman'].includes(req.agent.role)) throw new HttpError(403, 'Not allowed for your account');
+      res.json(await loadRoad());
+    } catch (err) { sendError(res, err); }
+  });
   // The order-wise sheet: one row per COD order with every attempt, who reached the customer and the result. Filter it to check any number on the Home pages.
   app.get('/api/cc/orders-ledger.csv', async (req, res) => {
     try {
@@ -1688,7 +1700,7 @@ module.exports = function mountCcRoutes(app, deps) {
   // or when the admin presses Refresh (at most once every 5 minutes). Numbers come from the code; the AI only words them (lib/opsBrief.js).
   let briefRun = null;
   async function freshBrief() {
-    if (!briefRun) briefRun = (async () => { const { tower, plan } = await loadControlTower(); return opsAgent.generate(db, { tower, plan }); })().finally(() => { briefRun = null; });
+    if (!briefRun) briefRun = (async () => { const { tower, plan } = await loadControlTower(); let road = null; try { road = await loadRoad(); } catch (e) { console.error('[OpsAgent] road to 95 unavailable:', e.message); } return opsAgent.generate(db, { tower, plan, road }); })().finally(() => { briefRun = null; });
     return briefRun;
   }
   app.get('/api/cc/ops-brief', async (req, res) => {
