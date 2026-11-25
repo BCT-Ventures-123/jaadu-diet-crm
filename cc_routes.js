@@ -1335,7 +1335,7 @@ module.exports = function mountCcRoutes(app, deps) {
         const hasIvrCall = new Set([...touches.entries()].filter(([, v]) => v.some(x => x.team === 'ivr')).map(([k]) => k));
         const waMsgs = new Map();
         if ((await dbOne(`SELECT to_regclass('wa_messages') AS t`)).t) {
-          (await db(`SELECT order_id, sent_at FROM wa_messages WHERE order_id = ANY($1) AND NOT is_test AND sent_at IS NOT NULL ORDER BY sent_at`, [ids]))
+          (await db(`SELECT order_id, sent_at FROM wa_messages WHERE order_id = ANY($1) AND step <= 4 AND NOT is_test AND sent_at IS NOT NULL ORDER BY sent_at`, [ids]))
             .forEach(m => { if (!waMsgs.has(m.order_id)) waMsgs.set(m.order_id, []); waMsgs.get(m.order_id).push({ t: new Date(m.sent_at), team: 'wa', connected: false }); });
         }
         const waReplied = new Set();
@@ -1397,7 +1397,7 @@ module.exports = function mountCcRoutes(app, deps) {
     try {
       if (ids.length) {
         (await db(`SELECT DISTINCT order_id FROM order_status_events WHERE order_id = ANY($1) AND actor = ANY($2) AND event_type IN ('confirmed', 'cancelled', 'rnr')`, [ids, ['whatsapp', 'whatsapp_late', 'ivr_call', 'ivr_late']])).forEach(x => ivrSet.add(x.order_id));
-        if ((await dbOne(`SELECT to_regclass('wa_messages') AS t`)).t) (await db(`SELECT DISTINCT order_id FROM wa_messages WHERE order_id = ANY($1) AND NOT is_test AND sent_at IS NOT NULL`, [ids])).forEach(x => ivrSet.add(x.order_id));
+        if ((await dbOne(`SELECT to_regclass('wa_messages') AS t`)).t) (await db(`SELECT DISTINCT order_id FROM wa_messages WHERE order_id = ANY($1) AND step <= 4 AND NOT is_test AND sent_at IS NOT NULL`, [ids])).forEach(x => ivrSet.add(x.order_id));
       }
     } catch (e) { console.error('[Audit] could not read the WhatsApp history:', e.message); }
     const none =rows.filter(o => !(o.calls || []).length && !ivrSet.has(o.id));
@@ -1496,7 +1496,7 @@ module.exports = function mountCcRoutes(app, deps) {
       const wa = (await has('wa_messages')) ? await db(`SELECT m.sent_at AS t, m.order_id, o.order_name AS "order", o.customer_phone AS phone, m.step, m.status,
                                     COALESCE((SELECT array_agg(DISTINCT e.event) FROM wa_events e WHERE e.send_id = m.send_id), '{}') AS events
                                  FROM wa_messages m JOIN orders_master o ON o.id = m.order_id
-                                 WHERE NOT m.is_test AND m.sent_at IS NOT NULL AND m.sent_at >= $1 AND m.sent_at < $2 ORDER BY m.sent_at LIMIT 60000`, [r.start, r.end]) : [];
+                                 WHERE NOT m.is_test AND m.step <= 4 AND m.sent_at IS NOT NULL AND m.sent_at >= $1 AND m.sent_at < $2 ORDER BY m.sent_at LIMIT 60000`, [r.start, r.end]) : [];
       const rows = logLib.merge({ callers, ivr, wa });
       const cell = (v) => { const t = v === null || v === undefined ? '' : String(v); return /[",\r\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -1582,11 +1582,12 @@ module.exports = function mountCcRoutes(app, deps) {
             COUNT(DISTINCT m.order_id) FILTER (WHERE e.event = 'clicked_change_address')::int AS change_address,
             COUNT(DISTINCT m.order_id) FILTER (WHERE e.event = 'replied_text')::int AS replied
           FROM wa_messages m LEFT JOIN wa_events e ON e.send_id = m.send_id
-          WHERE m.order_id = ANY($1) AND NOT m.is_test GROUP BY m.step ORDER BY m.step`, [ids]);
-        messaged = (await dbOne(`SELECT COUNT(DISTINCT order_id)::int AS n FROM wa_messages WHERE order_id = ANY($1) AND NOT is_test AND sent_at IS NOT NULL`, [ids])).n || 0;
+          WHERE m.order_id = ANY($1) AND m.step <= 4 AND NOT m.is_test GROUP BY m.step ORDER BY m.step`, [ids]);
+        messaged = (await dbOne(`SELECT COUNT(DISTINCT order_id)::int AS n FROM wa_messages WHERE order_id = ANY($1) AND step <= 4 AND NOT is_test AND sent_at IS NOT NULL`, [ids])).n || 0;
         confirmedByWa = (await dbOne(`SELECT COUNT(DISTINCT order_id)::int AS n FROM wa_events WHERE order_id = ANY($1) AND event = 'clicked_confirm' AND applied = 'confirmed_order'`, [ids])).n || 0;
       }
-      res.json({ from: r.from, to: r.to, orders: rows.length, orders_messaged: messaged, orders_messaged_pct: rows.length ? Math.round(messaged * 1000 / rows.length) / 10 : null, confirmed_by_whatsapp: confirmedByWa,
+      let shipping = []; try { shipping = await require('./lib/waNotify').report(db, r.from, r.to); } catch (e) { console.error('[WA] shipping report failed:', e.message); }
+      res.json({ from: r.from, to: r.to, orders: rows.length, orders_messaged: messaged, orders_messaged_pct: rows.length ? Math.round(messaged * 1000 / rows.length) / 10 : null, confirmed_by_whatsapp: confirmedByWa, shipping,
         bridge_has_data: steps.length > 0, steps: steps.map(s => ({ ...s, label: LABEL[s.step] || ('Message ' + (s.step + 1)), no_response: Math.max(0, s.sent - Math.max(s.confirm + s.cancel + s.change_address, s.replied)) })) });
     } catch (err) { sendError(res, err); }
   });  app.get('/api/cc/lead-audit', async (req, res) => {

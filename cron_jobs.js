@@ -126,7 +126,7 @@ async function syncConfirmationsFromSheet() {
           const wb = require('./lib/waBridge');
           if (wb.settings().mode === 'on') {
             await wb.ensureTables(db);
-            const managed = await db('SELECT 1 FROM wa_messages WHERE order_id = $1 LIMIT 1', [order.id]);
+            const managed = await db('SELECT 1 FROM wa_messages WHERE order_id = $1 AND step <= 4 LIMIT 1', [order.id]);
             if (managed.length) continue;
           }
         } catch (e) { console.error('[Sheet Sync] could not check the WhatsApp bridge for', orderNumber, e.message); }

@@ -931,6 +931,8 @@ const shiprocket = require('./lib/shiprocket');
 // Pre-warm the Shiprocket cache on startup (takes ~60s to scan all orders)
 if (process.env.SHIPROCKET_EMAIL) {
   setTimeout(() => shiprocket.refreshOrderCache().catch(e => console.error('[Shiprocket] Startup cache error:', e.message)), 5000);
+  // WhatsApp shipping messages (lib/waNotify.js): every 5 minutes note which orders the latest scan found out for delivery or undelivered. Only writes a small table; nothing is sent from here.
+  setInterval(() => require('./lib/waNotify').syncFromShiprocket(db, shiprocket.getLists()).catch(e => console.error('[WA] courier sync failed:', e.message)), 5 * 60 * 1000);
 }
 
 // Enrich Shiprocket orders with DB phone numbers (Shiprocket masks them)
