@@ -291,12 +291,13 @@
   // Road to 95% (lib/road95.js): every day's orders must reach 95 percent confirmed, and each day has 5 days to get there.
   function roadHtml(R) {
     if (!R || !R.days || !R.days.length) return '';
-    var st = { on_target: '<b style="color:var(--ds-brand)">On target</b>', in_progress: 'Working on it', missed: '<b style="color:var(--ds-danger)">Below 95%</b>' };
-    var rows = R.days.map(function (d) { return [dayLabel(d.day), num(d.orders), cell(d.confirmed, d.confirmed_pct), cell(d.cancelled, d.cancelled_pct), cell(d.open, d.open_pct), d.days_left ? num(d.days_left) + (d.days_left === 1 ? ' day' : ' days') : 'closed', d.need ? '<b>' + num(d.need) + '</b>' : '0', st[d.state] || '']; });
+    var st = { on_target: '<b style="color:var(--ds-brand)">On target</b>', behind: '<b style="color:var(--ds-warn,#b7791f)">Behind the goal</b>', missed: '<b style="color:var(--ds-danger)">Below 95%</b>' };
+    var rows = R.days.map(function (d) { return [dayLabel(d.day), num(d.orders), cell(d.confirmed, d.confirmed_pct), cell(d.cancelled, d.cancelled_pct), cell(d.open, d.open_pct), d.goal + '%', d.need ? '<b>' + num(d.need) + '</b>' : '0', d.days_left ? num(d.days_left) + (d.days_left === 1 ? ' day' : ' days') : 'closed', st[d.state] || '']; });
     var b = R.stuck.buckets;
     var list = (R.stuck.list || []).slice(0, 15).map(function (x) { var t = x.tries; return [esc(x.order), dayLabel(x.day), num(x.waiting_hours) + ' h', num(x.attempts), 'A ' + num(t.aman) + ' · C ' + num(t.cc) + ' · I ' + num(t.ivr) + ' · W ' + num(t.wa), x.last_try_by ? esc(x.last_try_by) + (x.last_try_hours_ago != null ? ', ' + num(x.last_try_hours_ago) + ' h ago' : '') : 'nobody yet']; });
-    return '<h3>Road to ' + R.target + '%: every day\'s orders</h3><div class="hm-sub">Each day\'s orders must reach <b>' + R.target + '% confirmed</b> within ' + R.mature_days + ' days. "Needs" is how many more confirmations that day still needs. The last 7 days, all channels.</div>' +
-      table(['Order date', 'Orders', 'Confirmed', 'Cancelled', 'Still open', 'Days left', 'Needs', 'State'], rows, ['l', 'r', 'r', 'r', 'r', 'r', 'r', 'm']) +
+    var g = R.stages || [85, 90, 93, 95];
+    return '<h3>Road to ' + R.target + '%: every day\'s orders</h3><div class="hm-sub">The goal depends on how old the day\'s orders are: <b>' + g[0] + '% confirmed on the day itself</b>, ' + g[1] + '% after 1 day, ' + g[2] + '% after 2 days, <b>' + g[3] + '% from day 3</b> (each day has ' + R.mature_days + ' days to get there). "Needs" is how many more confirmations that day still needs to reach its goal now. The last 7 days, all channels.</div>' +
+      table(['Order date', 'Orders', 'Confirmed', 'Cancelled', 'Still open', 'Goal now', 'Needs', 'Days left', 'State'], rows, ['l', 'r', 'r', 'r', 'r', 'r', 'r', 'r', 'm']) +
       '<div class="hm-sub"><b>' + num(R.stuck.total) + '</b> orders are still open: <b>' + num(b.none) + '</b> with no try, <b>' + num(b.one) + '</b> with one try, <b>' + num(b.two_three) + '</b> with 2 or 3 tries, <b>' + num(b.four_plus) + '</b> with 4 or more. The longest waiting first (A = Aman, C = call centre, I = IVR, W = WhatsApp, tries per channel):</div>' +
       (list.length ? table(['Order', 'Placed', 'Waiting', 'Tries', 'By channel', 'Last try'], list, ['l', 'l', 'r', 'r', 'l', 'l']) : '');
   }
