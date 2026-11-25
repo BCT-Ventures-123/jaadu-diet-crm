@@ -26,13 +26,15 @@ table { width:100%; border-collapse:collapse; font-size:13px; } th,td { text-ali
   var $ = function (id) { return document.getElementById(id); };
   var esc = function (s) { return String(s === null || s === undefined ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
   var kind = 'confirm', slot = 0, ntest = 0;
-  var KINDS = [['confirm', 'First message'], ['reminder_1', 'Reminder 1'], ['reminder_2', 'Reminder 2'], ['reminder_3', 'Reminder 3']];
+  var KINDS = [['confirm', 'First message'], ['reminder_1', 'Reminder 1'], ['reminder_2', 'Reminder 2'], ['reminder_3', 'Reminder 3'],
+    ['prepaid_confirm', 'Prepaid confirmation'], ['ofd_1', 'Out for delivery'], ['ndr_1', 'Delivery failed']];   // the last three also stand for ofd_2 and ndr_2/ndr_3, which use the same templates
   function when(v) { return v ? new Date(v).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''; }
   function api(url, opt) { return fetch(url, opt).then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(r.status === 401 ? 'Please sign in first (open the CRM, then come back here).' : (j.error || 'Request failed')); return j; }); }); }
   function draw(s) {
     var modeCls = s.mode === 'on' ? 'ok' : s.mode === 'test' ? 'warn' : 'mute';
     $('status').innerHTML = '<div>Mode: <b class="' + modeCls + '">' + esc(s.mode.toUpperCase()) + '</b> · Secret key: <b class="' + (s.key_set ? 'ok' : 'bad') + '">' + (s.key_set ? 'set' : 'NOT SET') + '</b> · Go-live: <b>' + (s.go_live ? esc(when(s.go_live)) : 'not set') +
       '</b> · Messages enabled: <b>' + esc((s.enabled_keys || []).join(', ') || 'none') + '</b> · Wait before callers: <b>' + (s.hold_minutes || 0) + ' min</b> · WhatsApp quality: <b>' + esc((s.flags && s.flags.quality) || 'unknown') + '</b></div>' +
+      '<div style="margin-top:4px">Shipping messages (prepaid, out for delivery, delivery failed): <b class="' + ((s.shipping_messages && s.shipping_messages.keys.length) ? 'ok' : 'mute') + '">' + esc((s.shipping_messages && s.shipping_messages.keys.length) ? s.shipping_messages.keys.join(', ') : 'OFF (set WA_NOTIFY_KEYS in Railway)') + '</b> · only courier events after: <b>' + (s.shipping_messages && s.shipping_messages.go_live ? esc(when(s.shipping_messages.go_live)) : 'not set') + '</b></div>' +
       (s.mode === 'off' ? '<div class="warn" style="margin-top:6px">Nothing is sent while the mode is off. Set WA_MODE in Railway (test first).</div>' : '');
     ntest = s.test_numbers || 0;
     $('nums').innerHTML = ntest ? '' : '<span class="warn">No test numbers are set up (WA_TEST_NUMBERS or IVR_TEST_NUMBERS).</span>';

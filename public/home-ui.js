@@ -171,9 +171,13 @@
   function waReportHtml(W) {
     if (!W) return '';
     var h = '<h3>WhatsApp messages, one by one</h3><div class="hm-sub">Orders placed on these dates: <b>' + num(W.orders) + '</b>. Got at least one WhatsApp message: <b>' + num(W.orders_messaged) + '</b> (' + pc(W.orders_messaged_pct) + '). Confirmed with the WhatsApp button: <b>' + num(W.confirmed_by_whatsapp) + '</b>. Each row counts orders. The 2nd message goes 4 hours after the 1st, the 3rd 4 hours after the 2nd.</div>';
-    if (!W.bridge_has_data) return h + '<div class="hm-flag warn">No WhatsApp messages are recorded for these dates yet. The WhatsApp bridge records every message sent; this table fills as soon as it is live.</div>';
+    // Prepaid, out-for-delivery and delivery-failed messages, one row per message name (messages created on these dates).
+    var ship = (W.shipping || []).filter(function (x) { return x.sent || x.failed; });
+    var shipH = ship.length ? '<h3>Shipping messages, one by one</h3><div class="hm-sub">Prepaid confirmation, out for delivery and delivery failed. Each row counts messages created on these dates. Replies: tapped = customer used a button.</div>' + table(['Message', 'Sent', 'Delivered', 'Read', 'Failed', 'Replied (tapped)'],
+      ship.map(function (s) { return [esc(s.label), num(s.sent), cell(s.delivered, ratio(s.delivered, s.sent)), cell(s.read, ratio(s.read, s.sent)), num(s.failed), s.key.indexOf('ndr_') === 0 ? num(s.tapped) + ' (' + num(s.ndr_yes) + ' available, ' + num(s.ndr_no) + ' not)' : s.key.indexOf('ofd_') === 0 ? num(s.tapped) + ' (' + num(s.ofd_alt) + ' alternate number)' : '-']; })) : '';
+    if (!W.bridge_has_data) return h + '<div class="hm-flag warn">No WhatsApp messages are recorded for these dates yet. The WhatsApp bridge records every message sent; this table fills as soon as it is live.</div>' + shipH;
     return h + table(['', 'Orders messaged', 'Delivered', 'Read', 'Confirm', 'Cancel', 'Change address', 'Replied', 'No response yet'],
-      W.steps.map(function (s) { return [esc(s.label), num(s.sent), cell(s.delivered, ratio(s.delivered, s.sent)), cell(s.read, ratio(s.read, s.sent)), cell(s.confirm, ratio(s.confirm, s.sent)), cell(s.cancel, ratio(s.cancel, s.sent)), cell(s.change_address, ratio(s.change_address, s.sent)), cell(s.replied, ratio(s.replied, s.sent)), num(s.no_response)]; }));
+      W.steps.map(function (s) { return [esc(s.label), num(s.sent), cell(s.delivered, ratio(s.delivered, s.sent)), cell(s.read, ratio(s.read, s.sent)), cell(s.confirm, ratio(s.confirm, s.sent)), cell(s.cancel, ratio(s.cancel, s.sent)), cell(s.change_address, ratio(s.change_address, s.sent)), cell(s.replied, ratio(s.replied, s.sent)), num(s.no_response)]; })) + shipH;
   }  // ===== THE LEDGER PAGES (lib/ledger.js): every number below is added up from one list of orders, so the pages agree =====
   var CHN = [['aman', 'Aman'], ['cc', 'Call centre'], ['ivr', 'IVR'], ['wa', 'WhatsApp']];
   function asOf(L) { return new Date(L.as_of).toLocaleString('en-IN', { timeZone: TZ, day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); }
