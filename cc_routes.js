@@ -272,8 +272,9 @@ module.exports = function mountCcRoutes(app, deps) {
       const now = new Date();
       // Smart queue: best lead to call next first, with the reason (lib/queue.js).
       const ho = new Map((rows.length ? await db(`SELECT DISTINCT ON (order_id) order_id, notes FROM order_status_events WHERE event_type = 'autopilot_move' AND new_value = 'CC' AND created_at > NOW() - INTERVAL '3 days' AND order_id = ANY($1) ORDER BY order_id, created_at DESC`, [rows.map(r => r.id)]) : []).map(e => [e.order_id, e.notes]));
+      const warm = await require('./lib/warmLeads').warmIds(db, rows.map(r => r.id));      // read the WhatsApp message, tapped nothing: called first inside their tier
       const queue = withRisk.map(l => {
-        const d = dnpStatus(dnp.get(l.id) || [], now), lead = { ...l, handover_reason: ho.get(l.id) || null };
+        const d = dnpStatus(dnp.get(l.id) || [], now), lead = { ...l, handover_reason: ho.get(l.id) || null, wa_warm: warm.has(l.id) };
         return { ...lead, ...(extra.get(l.id) || {}), assigned_to: 'CC', callback_badge: callbackBadge(l, now), dnp: d, priority: queueLib.prioritise(lead, d, now) };
       });
       res.json(queueLib.sortQueue(queue));
@@ -1556,7 +1557,7 @@ module.exports = function mountCcRoutes(app, deps) {
       const r = parseRange(req.query);
       const rows = await fetchCohortRows(r, null, null), ids = rows.map(o => o.id);
       const has = ids.length ? (await dbOne(`SELECT to_regclass('wa_messages') AS t`)).t : null;
-      const LABEL = ['Message 1: sent at once', 'Message 2: 4 hours later', 'Message 3: 8 hours after the first'];
+      const LABEL = ['Message 1: sent at once', 'Message 2: 4 hours later', 'Message 3: 8 hours after the first', 'Message 4: the next morning', 'Message 5: the morning after'];
       let steps = [], messaged = 0, confirmedByWa = 0;
       if (has) {
         steps = await db(`SELECT m.step,

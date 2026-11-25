@@ -884,7 +884,8 @@ app.get('/api/aman/fresh-leads', async (req, res) => {
     const tries = rows.length ? await db(`SELECT order_id, created_at FROM lead_call_log WHERE order_id = ANY($1) AND disposition = 'dnp'`, [rows.map(r => r.id)]) : [];
     const byOrder = new Map(); tries.forEach(t => { if (!byOrder.has(t.order_id)) byOrder.set(t.order_id, []); byOrder.get(t.order_id).push(t.created_at); });
     const now = new Date();
-    res.json(queueLib.sortQueue(rows.map(l => { const d = dnpStatus(byOrder.get(l.id) || [], now); return { ...l, callback_badge: callbackBadge(l, now), dnp: d, priority: queueLib.prioritise(l, d, now) }; })));
+    const warm = await require('./lib/warmLeads').warmIds(db, rows.map(r => r.id));      // read the WhatsApp message, tapped nothing: called first inside their tier
+    res.json(queueLib.sortQueue(rows.map(l => { const d = dnpStatus(byOrder.get(l.id) || [], now), lead = { ...l, wa_warm: warm.has(l.id) }; return { ...lead, callback_badge: callbackBadge(l, now), dnp: d, priority: queueLib.prioritise(lead, d, now) }; })));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
