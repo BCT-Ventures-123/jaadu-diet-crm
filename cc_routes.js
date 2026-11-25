@@ -199,64 +199,38 @@ module.exports = function mountCcRoutes(app, deps) {
     });
   });
 
-  app.get('/api/cc/kpi', async (req, res) => {
-    try { res.json((await dbOne('SELECT * FROM v_kpi_ribbon')) || {}); } catch (err) { sendError(res, err); }
-  });
+  // Today's COD orders with every attempt on every channel (the order ledger): the base of the KPI ribbons on the Aman and call-centre pages (owner 2026-11-25: COD orders only, all channels count).
+  async function todayCodLedger(team) {
+    const day = todayIst(), r = parseRange({ from: day, to: day }), rows = await fetchCohortRows(r, team, null), touches = await loadTouches(rows.map(o => o.id));
+    const ledgerLib = require('./lib/ledger'), led = ledgerLib.buildLedger(rows, touches, new Date());
+    return { led, touches, b: ledgerLib.block(led) };
+  }
+  // The ribbon: the pending / NDR / duplicate counts stay from the database view; Today Orders / Confirmed / Cancelled / Confirm Rate / Confirmed value are now COD orders placed today (prepaid is auto-confirmed and was inflating them).
+  const kpiRibbon = async (req, res) => {
+    try {
+      const base = (await dbOne('SELECT * FROM v_kpi_ribbon')) || {};
+      try {
+        const { led, b } = await todayCodLedger(null);
+        Object.assign(base, { today_orders: String(b.leads), today_confirmed: String(b.confirmed), today_cancelled: String(b.cancelled), today_confirm_rate: String(b.leads ? Math.round(b.confirmed * 1000 / b.leads) / 10 : 0),
+          today_confirmed_value: String(led.filter(o => o.status === 'confirmed').reduce((s, o) => s + (o.amount || 0), 0)) });
+      } catch (e) { console.error('[KPI] ledger numbers skipped, showing the database view:', e.message); }
+      res.json(base);
+    } catch (err) { sendError(res, err); }
+  };
+  app.get('/api/cc/kpi', kpiRibbon);
+  app.get('/api/kpi', kpiRibbon);        // Aman and admin (registered after the role guard above, so it answers before the older copy in server.js)
 
   // Today's order-based connectivity KPI (team filter: CC, InHouse, or all)
   // Registered on both /api/cc/ (for CC agents) and /api/kpi/ (for Aman/admin)
   app.get(['/api/cc/kpi/connectivity', '/api/kpi/connectivity'], async (req, res) => {
     try {
-      const team = req.query.team; // 'CC', 'InHouse', or omit for all
-      const todayIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-      const y = todayIST.getFullYear(), m = String(todayIST.getMonth() + 1).padStart(2, '0'), d = String(todayIST.getDate()).padStart(2, '0');
-      const start = new Date(`${y}-${m}-${d}T00:00:00+05:30`);
-      const end = new Date(`${y}-${m}-${d}T23:59:59+05:30`);
-
-      const safeTeam = team === 'CC' ? 'CC' : team === 'InHouse' ? 'InHouse' : null;
-      const params = [start.toISOString(), end.toISOString(), cfg.CONNECTED_DISPOSITIONS];
-      let teamFilter = '';
-      if (safeTeam) { params.push(safeTeam); teamFilter = ` AND assigned_to = $${params.length}`; }
-
-      const { rows: [stats] } = await pool.query(`
-        WITH today_orders AS (
-          SELECT id FROM orders_master
-          WHERE shopify_created_at >= $1 AND shopify_created_at < $2${teamFilter}
-        ),
-        numbered AS (
-          SELECT l.order_id, l.disposition,
-                 ROW_NUMBER() OVER (PARTITION BY l.order_id ORDER BY l.created_at) AS attempt_num
-          FROM lead_call_log l
-          JOIN today_orders o ON o.id = l.order_id
-        ),
-        per_order AS (
-          SELECT order_id,
-                 count(*) FILTER (WHERE attempt_num = 1) AS has_1st,
-                 count(*) FILTER (WHERE attempt_num = 1 AND disposition NOT IN ('dnp')) AS connected_1st
-          FROM numbered GROUP BY order_id
-        )
-        SELECT
-          (SELECT count(*) FROM today_orders)::int AS total_orders,
-          count(*)::int AS leads_attempted,
-          sum(has_1st)::int AS attempt_1_total,
-          sum(connected_1st)::int AS attempt_1_connected,
-          (SELECT count(DISTINCT l.order_id) FROM lead_call_log l JOIN today_orders t ON t.id = l.order_id WHERE l.disposition = ANY($3))::int AS total_connected
-        FROM per_order
-      `, params);
-
-      const total = stats.total_orders || 0;
-      const pctVal = (n, d2) => d2 > 0 ? Math.round(n / d2 * 1000) / 10 : 0;
-      res.json({
-        total_orders: total,
-        leads_attempted: stats.leads_attempted || 0,
-        not_called: total - (stats.leads_attempted || 0),
-        attempt_1_total: stats.attempt_1_total || 0,
-        attempt_1_connected: stats.attempt_1_connected || 0,
-        attempt_1_coverage_pct: pctVal(stats.attempt_1_total || 0, total),
-        attempt_1_connectivity_pct: pctVal(stats.attempt_1_connected || 0, total),
-        total_connected: stats.total_connected || 0,
-        overall_connectivity_pct: pctVal(stats.total_connected || 0, total),
-      });
+      const team = req.query.team === 'CC' ? 'CC' : req.query.team === 'InHouse' ? 'InHouse' : null;       // 'CC', 'InHouse', or omit for all
+      const { led, touches, b } = await todayCodLedger(team);
+      const total = b.leads, pctVal = (n, d2) => (d2 > 0 ? Math.round(n / d2 * 1000) / 10 : 0);
+      // Same rules as Home and the Daily report: today's COD orders of the team; an attempt is a call, an IVR call or a WhatsApp message; connected = the customer answered on any channel.
+      const first = led.filter(o => { const ts = (touches.get(o.id) || []).slice().sort((x, y) => new Date(x.t) - new Date(y.t)); return ts.length && ts[0].connected; }).length;
+      res.json({ total_orders: total, leads_attempted: b.attempted, not_called: b.not_attempted, attempt_1_total: b.attempted, attempt_1_connected: first, attempt_1_coverage_pct: pctVal(b.attempted, total), attempt_1_connectivity_pct: pctVal(first, total),
+        total_connected: b.connected, overall_connectivity_pct: pctVal(b.connected, total) });
     } catch (err) { sendError(res, err); }
   });
 
@@ -1162,10 +1136,21 @@ module.exports = function mountCcRoutes(app, deps) {
            AND o.total_price >= $4
            AND EXISTS (SELECT 1 FROM jsonb_array_elements(${ITEMS_SQL}) li, unnest($5::text[]) p WHERE starts_with(COALESCE(li->>'title',''), p))`,
         [r.start, r.end, teamList(team), productsLib.MIN_PRICE, productPrefixes(product)]);
+      // The order counts (attempted, connected, not connected, confirmed, cancelled, pending) come from the order ledger: COD base, every channel counted, so this page agrees with Home and the Daily report.
+      // The older call-only engine still supplies the call facts (call timing, the attempt-by-attempt call results) and the open-lead board.
+      let funnel = funnelLib.buildFunnel(rows), fdays = funnelLib.buildDays(rows), bySku = funnelLib.buildBySku(rows);
+      try {
+        const cr = require('./lib/codReport'), led = require('./lib/ledger').buildLedger(rows, await loadTouches(rows.map(o => o.id)), new Date());
+        funnel = { ...funnel, ...cr.funnelFromLedger(led) };
+        fdays = fdays.map(d => ({ ...d, ...cr.funnelFromLedger(led.filter(o => o.day === d.day)) }));
+        const skuIds = new Map(); rows.forEach(o => (o.skus || []).forEach(s => { if (!skuIds.has(s.key)) skuIds.set(s.key, new Set()); skuIds.get(s.key).add(o.id); }));
+        bySku = { ...bySku, rows: bySku.rows.map(x => { const ids = skuIds.get(x.key); if (!ids) return x; const f = cr.funnelFromLedger(led.filter(o => ids.has(o.id))); return { ...x, attempted: f.attempted, connected: f.connected, confirmed: f.confirmed, cancelled: f.cancelled, pending: f.pending, not_connected: f.not_connected,
+          attempted_pct: f.attempted_pct, connected_pct: f.connected_pct, confirmed_pct: f.confirmed_pct, cancelled_pct: f.cancelled_pct, not_connected_pct: f.not_connected_pct }; }) };
+      } catch (e) { console.error('[Funnel] ledger numbers skipped, showing the older call-only counts:', e.message); }
       res.json({
         from: r.from, to: r.to, team: team || 'all', product, calling_since, prepaid,
-        funnel: funnelLib.buildFunnel(rows), days: funnelLib.buildDays(rows), pipeline: funnelLib.buildPipeline(rows),
-        by_sku: funnelLib.buildBySku(rows),
+        funnel, days: fdays, pipeline: funnelLib.buildPipeline(rows),
+        by_sku: bySku,
         products: productsLib.PRODUCTS.map(p => ({ key: p.key, name: p.name })),
         excluded: { prepaid_orders: skipped.prepaid, test_orders: skipped.test, other_products: skipped.other_products, min_price: productsLib.MIN_PRICE },
       });
@@ -1191,7 +1176,8 @@ module.exports = function mountCcRoutes(app, deps) {
         db(`SELECT notes AS reason, COUNT(*)::int AS n FROM order_status_events WHERE event_type = 'autopilot_move' AND created_at >= $1 GROUP BY 1`, [r.start]),
         fetchCohortRows(r, req.agent.role === 'agent' ? 'CC' : null, null),
       ]);
-      const ov = report2Lib.buildReport2(cohort, [], 1).overview;
+      let apConn = null; try { apConn = require('./lib/codReport').connectedAtOf(await loadTouches(cohort.map(o => o.id))); } catch (e) { console.error('[Autopilot] any-channel connectivity skipped:', e.message); }
+      const ov = report2Lib.buildReport2(cohort, [], 1, apConn).overview;
       const out = {
         mode: s.mode, in_shift: autopilotLib.shiftOpen(now, s), presence,
         pace: { cc: autopilotLib.pace('CC', leads, presence, rates.cc, now, s), aman: autopilotLib.pace('InHouse', leads, presence, rates.aman, now, s) },
@@ -1285,9 +1271,11 @@ module.exports = function mountCcRoutes(app, deps) {
       let e2e = null;
       try { e2e = e2eLib.buildE2E(rows, await fetchPrepaidByDay(r, team, null), { today: todayIst() }); } catch (e) { console.error('[Report] end-to-end table skipped:', e.message); }
       // The end-to-end block the page shows (owner 2026-11-25): COD orders are the base, all four channels count, prepaid is one separate line. The older `e2e` above stays for the control tower and the Excel file.
-      let codAll = null;
+      let codAll = null, connectedAt = null;
       try {
-        const led = require('./lib/ledger').buildLedger(rows, await loadTouches(rows.map(o => o.id)), now);
+        const touches = await loadTouches(rows.map(o => o.id));
+        const led = require('./lib/ledger').buildLedger(rows, touches, now);
+        connectedAt = require('./lib/codReport').connectedAtOf(touches);       // the same "customer answered on any channel" rule for the Overview and the by-day tables below
         codAll = require('./lib/codReport').build(led, await fetchPrepaidByDay(r, team, null), { today: todayIst() });
       } catch (e) { console.error('[Report] COD end-to-end block skipped:', e.message); }
       const openRows = backlogRows.filter(o => new Date(o.order_at) >= sinceOf(o.team));
@@ -1299,7 +1287,7 @@ module.exports = function mountCcRoutes(app, deps) {
         from: r.from, to: r.to, team: team || 'all', generated_at: now.toISOString(),
         calling_since: { call_centre: since.CC.toISOString(), aman: since.InHouse.toISOString(), configured: cfg.CALLING_STARTED_ON },
         cohort, e2e, cod_all: codAll, by_order_day: funnelLib.buildDays(rows),
-        analysis: report2Lib.buildReport2(rows, hourCalls, Math.max(1, Math.round((new Date(r.to + 'T00:00:00Z') - new Date(r.from + 'T00:00:00Z')) / 864e5) + 1)),
+        analysis: report2Lib.buildReport2(rows, hourCalls, Math.max(1, Math.round((new Date(r.to + 'T00:00:00Z') - new Date(r.from + 'T00:00:00Z')) / 864e5) + 1), connectedAt),
         activity, by_agent: byAgent, by_call_day: byCallDay,
         backlog: { pipeline, uncalled_age: age, fresh_why: freshWhy, window_days: 45 },
         not_called_why: Object.fromEntries(notCalledWhy.map(x => [x.k, x.n])), freshness: fresh, deciders,
@@ -1683,7 +1671,12 @@ module.exports = function mountCcRoutes(app, deps) {
       const r14 = parseRange({ from: shift(today, -13), to: today });
       const r7 = parseRange({ from: shift(today, -6), to: today });
       const rows = await fetchCohortRows(r14, null, null);
-      const e2e = e2eLib.buildE2E(rows, await fetchPrepaidByDay(r14, null, null), { today });
+      // The tower uses the same numbers as the Daily report: COD orders are the base and every channel counts (lib/codReport.js, from the order ledger). If that fails it falls back to the older call-only engine.
+      let e2e;
+      try {
+        const cr = require('./lib/codReport'), touches14 = await loadTouches(rows.map(o => o.id));
+        e2e = { days: cr.asTowerDays(cr.build(require('./lib/ledger').buildLedger(rows, touches14, new Date()), await fetchPrepaidByDay(r14, null, null), { today })) };
+      } catch (e) { console.error('[ControlTower] ledger numbers skipped, using the older engine:', e.message); e2e = e2eLib.buildE2E(rows, await fetchPrepaidByDay(r14, null, null), { today }); }
       const from7 = shift(today, -6);
       const shippedConfirmed = rows.filter(o => o.day >= from7 && o.status === 'confirmed' && o.shipped).length;
       let team = null, ship = null, shipNote = null, plan = null;
@@ -1930,7 +1923,9 @@ module.exports = function mountCcRoutes(app, deps) {
 
       const out = { from: r.from, to: r.to, view, targets: scoreLib.TARGETS };
       if (view === 'all') {
-        out.goal = scoreLib.buildGoal(await fetchCohortRows(r, null, null));
+        const goalRows = await fetchCohortRows(r, null, null);
+        let goalConn = null; try { goalConn = require('./lib/codReport').connectedAtOf(await loadTouches(goalRows.map(o => o.id))); } catch (e) { console.error('[Scoreboard] any-channel reached skipped:', e.message); }
+        out.goal = scoreLib.buildGoal(goalRows, goalConn);
         // Plain "how many orders came in" per day: COD + prepaid, real tea orders only (same rules as everywhere else).
         const days = await db(
           `SELECT (COALESCE(o.shopify_created_at, o.created_at) AT TIME ZONE 'Asia/Kolkata')::date::text AS day,
@@ -2185,7 +2180,8 @@ module.exports = function mountCcRoutes(app, deps) {
         AND EXISTS (SELECT 1 FROM jsonb_array_elements(${ITEMS_SQL}) li, unnest($4::text[]) p WHERE starts_with(COALESCE(li->>'title',''), p)) GROUP BY 1`,
       [r.start, r.end, productsLib.MIN_PRICE, productsLib.ALLOWED_PREFIXES, cfg.CONNECTED_DISPOSITIONS, cfg.CALL_DISPOSITIONS, safeTeam ? [safeTeam] : ['CC', 'InHouse']]);
     const nDays = Math.max(1, Math.round((new Date(r.to + 'T00:00:00Z') - new Date(r.from + 'T00:00:00Z')) / 864e5) + 1);
-    const an = report2Lib.buildReport2(rows, hourCalls, nDays);
+    let dlConn = null; try { dlConn = require('./lib/codReport').connectedAtOf(await loadTouches(rows.map(o => o.id))); } catch (e) { console.error('[Download] any-channel reached skipped:', e.message); }
+    const an = report2Lib.buildReport2(rows, hourCalls, nDays, dlConn);
     const sheet = (name, head, body) => { const w = wb.addWorksheet(name); w.columns = head.map(h => ({ header: h, width: Math.max(12, h.length + 3) })); w.getRow(1).eachCell(cell => Object.assign(cell, headerStyle)); body.forEach(b => w.addRow(b)); return w; };
     const o = an.overview, hr = (x) => `${String(x).padStart(2, '0')}:00 - ${String((x + 1) % 24).padStart(2, '0')}:00`;
     sheet('Overview', ['Block', 'Metric', 'Value'], [
