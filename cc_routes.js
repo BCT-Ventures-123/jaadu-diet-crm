@@ -1284,6 +1284,12 @@ module.exports = function mountCcRoutes(app, deps) {
       // End to end: every order down to the confirmation, with counts and percentages, and the same day by day. A failure here never breaks the rest of the report.
       let e2e = null;
       try { e2e = e2eLib.buildE2E(rows, await fetchPrepaidByDay(r, team, null), { today: todayIst() }); } catch (e) { console.error('[Report] end-to-end table skipped:', e.message); }
+      // The end-to-end block the page shows (owner 2026-11-25): COD orders are the base, all four channels count, prepaid is one separate line. The older `e2e` above stays for the control tower and the Excel file.
+      let codAll = null;
+      try {
+        const led = require('./lib/ledger').buildLedger(rows, await loadTouches(rows.map(o => o.id)), now);
+        codAll = require('./lib/codReport').build(led, await fetchPrepaidByDay(r, team, null), { today: todayIst() });
+      } catch (e) { console.error('[Report] COD end-to-end block skipped:', e.message); }
       const openRows = backlogRows.filter(o => new Date(o.order_at) >= sinceOf(o.team));
       const pipeline = funnelLib.buildPipeline(openRows, now);
       const age = pipeline.fresh_age;
@@ -1292,7 +1298,7 @@ module.exports = function mountCcRoutes(app, deps) {
       res.json({
         from: r.from, to: r.to, team: team || 'all', generated_at: now.toISOString(),
         calling_since: { call_centre: since.CC.toISOString(), aman: since.InHouse.toISOString(), configured: cfg.CALLING_STARTED_ON },
-        cohort, e2e, by_order_day: funnelLib.buildDays(rows),
+        cohort, e2e, cod_all: codAll, by_order_day: funnelLib.buildDays(rows),
         analysis: report2Lib.buildReport2(rows, hourCalls, Math.max(1, Math.round((new Date(r.to + 'T00:00:00Z') - new Date(r.from + 'T00:00:00Z')) / 864e5) + 1)),
         activity, by_agent: byAgent, by_call_day: byCallDay,
         backlog: { pipeline, uncalled_age: age, fresh_why: freshWhy, window_days: 45 },
