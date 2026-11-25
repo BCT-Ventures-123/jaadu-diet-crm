@@ -173,6 +173,23 @@ test('result: delivery-failed and out-for-delivery taps are only recorded (the o
   assert.equal((await wa.result(dup, { send_id: 'o1-ndr_1', event: 'clicked_ndr_no', provider_message_id: 'wamid.1' })).body.duplicate, true);
 });
 
+test('result: what the customer chose is stored once under the order, with a readable label; unknown kinds and test rows are not stored', async () => {
+  wa._reset(); nf._reset();
+  const mk = () => fakeDb({ 'FROM orders_master WHERE order_name': () => [{ id: 'o1', order_name: '#44153', phone10: '9702009999' }], 'INSERT INTO wa_events': () => [{ id: 7 }] });
+  const cases = [['slot', '12 PM - 3 PM', 'Reattempt 12 PM - 3 PM'], ['alt_number', '1234567890', 'Alternate number 1234567890'], ['reschedule', 'Friday, 28 Nov', 'Rescheduled to Friday, 28 Nov'], ['address', '12 MG Road, Pune', 'New address: 12 MG Road, Pune']];
+  for (const [kind, text, label] of cases) {
+    const db = mk(); const r = await wa.result(db, { send_id: 'ship-reply-44153', order_number: '44153', event: 'ship_reply', kind, text, provider_message_id: 'ship-reply-44153-' + kind + '-1' });
+    assert.equal(r.status, 200); assert.equal(r.body.applied, 'reply_saved');
+    const ins = db.log.find(l => /INSERT INTO wa_ship_replies/.test(l.sql)); assert.deepEqual([ins.p[0], ins.p[1], ins.p[2], ins.p[3], ins.p[4]], ['o1', '#44153', kind, text, label]);
+  }
+  const bad = mk(); assert.equal((await wa.result(bad, { send_id: 'x', order_number: '44153', event: 'ship_reply', kind: 'weird', text: 't', provider_message_id: 'p' })).body.applied, 'recorded');
+  assert.ok(!bad.log.some(l => /INSERT INTO wa_ship_replies/.test(l.sql)));
+  const dup = fakeDb({ 'FROM orders_master WHERE order_name': () => [{ id: 'o1', order_name: '#44153', phone10: '9' }], 'INSERT INTO wa_events': () => [] });
+  assert.equal((await wa.result(dup, { send_id: 'x', order_number: '44153', event: 'ship_reply', kind: 'slot', text: 't', provider_message_id: 'p' })).body.duplicate, true);
+  assert.ok(!dup.log.some(l => /INSERT INTO wa_ship_replies/.test(l.sql)));                                               // the same answer twice is saved once
+  assert.equal((await wa.result(fakeDb(), { send_id: 'x', order_number: '44153', event: 'ship_reply', kind: 'slot', text: 't' })).status, 404);
+});
+
 test('result: an old out-for-delivery button (no send id) is found by the order number', async () => {
   wa._reset(); nf._reset();
   const db = fakeDb({ 'FROM orders_master WHERE order_name': () => [{ id: 'o1', order_name: '#44153', phone10: '9702009999' }], 'INSERT INTO wa_events': () => [{ id: 3 }] });

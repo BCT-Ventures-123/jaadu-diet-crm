@@ -12,7 +12,11 @@ test('backup sheet: one row per order shows each channel and who finished it', (
   assert.equal(b[5], 'Call centre'); assert.equal(b[8], 'Confirmed'); assert.equal(b[9], 3);
   const c = sb.toRow({ ...base, confirmation_status: 'confirmed', fin_actor: 'Aman', fin_role: 'aman' }, 'x'); assert.equal(c[5], 'Aman');
   const w = sb.toRow({ ...base, confirmation_status: 'confirmed', fin_actor: 'whatsapp_late', wa_event: 'confirmed' }, 'x'); assert.equal(w[5], 'WhatsApp'); assert.equal(w[11], 'Confirmed');
-  assert.equal(a.length, 14); assert.equal(a[12], 'x'); assert.equal(a[13], '');                                         // column N (WhatsApp Messages) comes after Updated
+  assert.equal(a.length, 16); assert.equal(a[12], 'x'); assert.equal(a[13], '');                                         // column N (WhatsApp Messages) comes after Updated
+  assert.equal(a[14], ''); assert.equal(a[15], '');                                                                      // O and P: shipping messages and the customer's reply, empty when there are none
+  const s = sb.toRow({ ...base, ship_msgs: 'ofd_1, ofd_2, ndr_1', ship_reply: 'Reattempt 12 PM - 3 PM' }, 'x'); assert.equal(s[14], 'ofd_1, ofd_2, ndr_1'); assert.equal(s[15], 'Reattempt 12 PM - 3 PM');
+  assert.equal(sb.HEAD[14], 'Shipping WhatsApp'); assert.equal(sb.HEAD[15], 'Customer Reply'); assert.equal(sb.HEAD.slice(0, 14).join(), ['Order', 'Order Date', 'Payment', 'Amount', 'Main Disposition', 'Finished By', 'Aman', 'Aman Tries', 'Call Centre', 'Call Centre Tries', 'IVR', 'WhatsApp', 'Updated', 'WhatsApp Messages'].join());   // A to N unchanged
+  assert.ok(/ship_msgs/.test(sb.buildSql(true, true, true)) && !/ship_msgs/.test(sb.buildSql(true, true, false)));       // the columns are only asked for when the table exists
 });
 
 test('backup sheet: main status of orders still open', () => {
@@ -64,7 +68,7 @@ test('backup sheet: run writes the rows, clears the leftovers below, and builds 
   const r = await sb.run({ db, sheets, sheetId: 'S', now: new Date('2026-11-20T08:00:00Z') });
   assert.equal(r.rows, 2); assert.equal(r.report_created, true);
   const up = sheets.calls.find(c => c[0] === 'update' && /CRM Status/.test(c[1])); assert.equal(up[2], 3);                 // header + 2 rows
-  assert.deepEqual(sheets.calls.find(c => c[0] === 'clear'), ['clear', "'CRM Status'!A4:N"]);
+  assert.deepEqual(sheets.calls.find(c => c[0] === 'clear'), ['clear', "'CRM Status'!A4:P"]);
   assert.ok(sheets.calls.some(c => c[0] === 'batch' && c[1].includes('addSheet')));
   const again = fakeSheets({ haveTabs: ['CRM Status', 'Report'], reportMark: 'Confirmation report v1' });
   const r2 = await sb.run({ db, sheets: again, sheetId: 'S' });
