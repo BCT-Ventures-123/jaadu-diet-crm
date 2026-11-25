@@ -46,11 +46,25 @@ test('a lead goes to a person, not the IVR, when someone spoke to it, a callback
   assert.equal(ivr.blockedReason(lead('e', { attempts: 10, dnp_attempts: 10, dnp_days: 4 }), now, s), 'over_the_limit');
 });
 
-test('the IVR stops after its maximum tries and waits between tries', () => {
-  assert.equal(ivr.blockedReason(lead('a'), now, s, { tries: 5, last_at: at('10:00') }), 'ivr_done');
-  assert.equal(ivr.blockedReason(lead('a'), now, s, { tries: 4, last_at: at('10:00') }), null);                                  // the fifth try is still allowed
-  assert.equal(ivr.blockedReason(lead('a'), now, s, { tries: 1, last_at: at('18:30') }), 'ivr_too_soon');
-  assert.equal(ivr.blockedReason(lead('a'), now, s, { tries: 1, last_at: at('17:00') }), null);
+test('the IVR stops after its maximum tries and waits between tries (an older lead: 90 minutes)', () => {
+  const old = lead('a', { placed_at: ago(10) });                                                                                   // placed 10 days ago: the normal rules
+  assert.equal(ivr.blockedReason(old, now, s, { tries: 5, last_at: at('10:00') }), 'ivr_done');
+  assert.equal(ivr.blockedReason(old, now, s, { tries: 4, last_at: at('10:00') }), null);                                         // the fifth try is still allowed
+  assert.equal(ivr.blockedReason(old, now, s, { tries: 1, last_at: at('18:30') }), 'ivr_too_soon');
+  assert.equal(ivr.blockedReason(old, now, s, { tries: 1, last_at: at('17:00') }), null);
+});
+
+test('goal 95 percent a day (owner 2026-11-25): a recent unconfirmed order may get TWO IVR calls a day, at least 4 hours apart; an older lead still one', () => {
+  assert.equal(s.triesPerDayNew, 2); assert.equal(s.newDays, 3); assert.equal(s.newGapMinutes, 240);
+  const recent = lead('r', { placed_at: ago(1) }), old = lead('o', { placed_at: ago(10) });
+  assert.equal(ivr.blockedReason(recent, now, s, { tries: 1, tries_today: 1, last_at: at('10:00') }), null);                    // the morning call was 9 hours ago: the evening call may go
+  assert.equal(ivr.blockedReason(recent, now, s, { tries: 1, tries_today: 1, last_at: at('16:00') }), 'ivr_too_soon');             // only 3 hours ago
+  assert.equal(ivr.blockedReason(recent, now, s, { tries: 2, tries_today: 2, last_at: at('10:00') }), 'ivr_done_today');           // never a third call in a day
+  assert.equal(ivr.blockedReason(old, now, s, { tries: 1, tries_today: 1, last_at: at('10:00') }), 'ivr_done_today');             // an older lead: one a day
+  assert.equal(ivr.blockedReason(lead('x', { placed_at: ago(3, '20:00') }), now, s, { tries: 1, tries_today: 1, last_at: at('10:00') }), null);   // 2 days 23 h old: still new
+  assert.equal(ivr.blockedReason(lead('y', { placed_at: ago(3, '18:00') }), now, s, { tries: 1, tries_today: 1, last_at: at('10:00') }), 'ivr_done_today');   // 3 days 1 h old: no longer new
+  const off = ivr.settings({ IVR_TRIES_PER_DAY_NEW: '1' }); assert.equal(ivr.blockedReason(recent, now, off, { tries: 1, tries_today: 1, last_at: at('10:00') }), 'ivr_done_today');   // can be switched back in Railway
+  assert.equal(ivr.blockedReason(recent, now, s, { tries: 5, tries_today: 0, last_at: ago(1) }), 'ivr_done');                       // five in total still holds
 });
 
 test('the list is grouped, ordered fresh first, then today, recent and backlog, never-called first, and each lead is listed once', () => {
@@ -115,6 +129,6 @@ test('an order the IVR service refused twice in a day is left to a person, so on
 
 test('one try per lead per day by default, five in total (five days), and a lead tried today waits for tomorrow', () => {
   assert.equal(s.triesPerDay, 1); assert.equal(s.maxTries, 5); assert.equal(s.smart, true);
-  assert.equal(ivr.blockedReason(lead('a'), now, s, { tries: 1, tries_today: 1, last_at: at('10:00') }), 'ivr_done_today');
-  assert.equal(ivr.blockedReason(lead('a'), now, s, { tries: 1, tries_today: 0, last_at: new Date(now - 26 * 3600e3) }), null);
+  assert.equal(ivr.blockedReason(lead('a', { placed_at: ago(10) }), now, s, { tries: 1, tries_today: 1, last_at: at('10:00') }), 'ivr_done_today');
+  assert.equal(ivr.blockedReason(lead('a', { placed_at: ago(10) }), now, s, { tries: 1, tries_today: 0, last_at: new Date(now - 26 * 3600e3) }), null);
 });
