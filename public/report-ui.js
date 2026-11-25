@@ -131,6 +131,23 @@
       h += '<div class="rp-what" style="margin-top:6px">Needed a call = COD orders that nobody closed without a call (WhatsApp, IVR, sheet or automatic). Connected = the customer spoke on a call; address-fix, callback and do-not-call calls count as connected. Not connected = called, nobody ever picked up. Rejected = cancelled by the customer on a call. Call pick-up (picked up / calls made) is a different number from orders connected, so it is shown only in the Calls line.</div>';
       return h;
     }
+    // The end-to-end block on the right base (lib/codReport.js): COD orders are 100%, all four channels count, prepaid is one separate line that no percentage uses.
+    function codHtml(e) {
+      var h = '<h3>End to end: from every COD order to the confirmation</h3><div class="rp-what">Every percentage is a share of the <b>COD orders</b> placed in these dates. Prepaid orders ship directly and are not counted. Calls, IVR and WhatsApp all count. Goal: <b>' + e.goal + '% confirmed</b>.</div><div class="rp-card">' +
+        '<div class="rp-row hd"><div>Measure</div><div style="text-align:right">Count</div><div style="text-align:right">%</div></div>';
+      e.table.forEach(function (x) { var lead = x.base ? ((x.pct != null && x.pct !== 100 ? '% ' : '') + x.base) : '', hint = lead + (x.hint ? (lead ? ' · ' : '') + x.hint : ''); h += row(esc(x.label), x.count, x.pct == null ? '' : x.pct + '%', x.tone, { hint: esc(hint) }); });
+      h += '</div>';
+      var red = function (v, bad, strong) { return '<span style="' + (bad ? 'color:var(--ds-danger);font-weight:800' : '') + '">' + (v == null ? '—' : v + '%') + '</span>'; };
+      var cells = function (x, label) {
+        return { tot: label === 'Total', c: [label, num(x.cod), red(x.attempted_pct, x.attempted_pct != null && x.attempted_pct < 100 && !x.is_today), num(x.attempted), num(x.connected), p1(x.connected_pct), num(x.not_connected), (x.is_today && x.not_attempted ? num(x.not_attempted) + ' (waiting)' : num(x.not_attempted)),
+          num(x.cancelled), num(x.confirmed), red(x.confirmed_pct, false), num(x.open), p1(x.open_pct), num(x.prepaid)] };
+      };
+      h += '<div class="rp-what" style="margin-top:14px">Day by day, by order date. Every percentage is a share of that day\'s COD orders. Attempted % is red when a past day is below 100%. Prepaid is shown on its own and is not in any percentage.</div>' +
+        table(['Order date', 'COD orders', 'Attempted %', 'Attempted', 'Connected', 'Connected %', 'Not connected', 'Not tried', 'Cancelled', 'Confirmed', 'Confirmed %', 'Still open', 'Open %', 'Prepaid (not counted)'],
+          trs(e.days.map(function (x) { return cells(x, esc(nice(x.day))); }).concat([cells(e.totals, 'Total')])));
+      h += '<div class="rp-what" style="margin-top:6px">Connected = the customer answered on any channel (a call, an IVR key, a WhatsApp reply); an address fix counts as connected and confirmed. Not connected = tried, nobody answered (no answer, switched off, not reachable). Cancelled = the customer refused. Not tried = no channel has tried yet. Connected + not connected + not tried = COD orders.</div>';
+      return h;
+    }
     function render(d) {
       var c = d.cohort, a = d.activity, p = d.backlog.pipeline, age = d.backlog.uncalled_age, T = c.total_orders;
       el.querySelector('#rpSub').textContent = nice(d.from) + (d.from === d.to ? '' : ' to ' + nice(d.to)) + ' · ' + (d.team === 'all' ? 'All teams' : d.team === 'CC' ? 'Call centre' : 'Aman') + ' · India time';
@@ -138,7 +155,7 @@
       var cs = d.calling_since, day = function (iso) { return new Date(iso).toLocaleDateString('en-CA', { timeZone: TZ }); };
       var sinceDay = d.team === 'CC' ? day(cs.call_centre) : d.team === 'InHouse' ? day(cs.aman) : [day(cs.call_centre), day(cs.aman)].sort()[1];
       if (cs && d.from < sinceDay) h += '<div class="rp-recon" style="background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.45);color:var(--ds-warn-ink)"><b>Calling in the CRM started on ' + esc(nice(sinceDay)) + '.</b> Orders placed before that date have no call history here, so their "not called yet" numbers are not real. For clean numbers choose dates from ' + esc(nice(sinceDay)) + ' onwards. "Open right now" already ignores those older orders.</div>';
-      h += e2eHtml(d.e2e);
+      h += d.cod_all ? codHtml(d.cod_all) : e2eHtml(d.e2e);
       // Headline: the two different things people mix up, side by side
       h += '<div class="rp-grid" style="margin-top:8px">' +
         tile('Orders placed in these dates', T, 'new orders that came in', '') +
