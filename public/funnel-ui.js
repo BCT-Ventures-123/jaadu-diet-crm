@@ -102,21 +102,21 @@
 
       var funnel =
         row('Total orders', f.total_orders, f.total_orders ? 100 : 0, 'all') +
-        row('Attempted <small>(orders called at least once)</small>', f.attempted, f.attempted_pct, 'att') +
-        row('Total attempts <small>(all calls made)</small>', f.total_attempts, null, 'att', { sub: true }) +
-        row('Connected <small>(customer spoke)</small>', f.connected, f.connected_pct, 'con') +
-        row('Confirmed <small>(on a call)</small>', f.confirmed, f.confirmed_pct, 'ok') +
-        row('Cancelled <small>(on a call)</small>', f.cancelled, f.cancelled_pct, 'bad') +
-        row('Not connected <small>(called, never picked up)</small>', f.not_connected, f.not_connected_pct, 'warn') +
+        row('Attempted <small>(tried on any channel: call, IVR or WhatsApp)</small>', f.attempted, f.attempted_pct, 'att') +
+        row('Total attempts <small>(calls, IVR calls and WhatsApp messages)</small>', f.total_attempts, null, 'att', { sub: true }) +
+        row('Connected <small>(the customer answered, any channel)</small>', f.connected, f.connected_pct, 'con') +
+        row('Confirmed <small>(all ways)</small>', f.confirmed, f.confirmed_pct, 'ok') +
+        row('Cancelled <small>(the customer refused)</small>', f.cancelled, f.cancelled_pct, 'bad') +
+        row('Not connected <small>(tried, nobody answered)</small>', f.not_connected, f.not_connected_pct, 'warn') +
         row('Second attempt done', f.nc_2nd, f.nc_2nd_pct, 'warn', { sub: true, hint: f.nc_2nd_of_nc_pct + '% of the not-connected' }) +
-        row('Second attempt not done yet', f.nc_2nd_pending, f.not_connected ? Math.round(f.nc_2nd_pending * 1000 / f.not_connected) / 10 : 0, 'warn', { sub: true, hint: 'still to call again' }) +
+        row('Second attempt not done yet', f.nc_2nd_pending, f.not_connected ? Math.round(f.nc_2nd_pending * 1000 / f.not_connected) / 10 : 0, 'warn', { sub: true, hint: 'still to try again' }) +
         row('Third attempt done', f.nc_3rd, f.nc_3rd_pct, 'warn', { sub: true, hint: f.nc_3rd_of_nc_pct + '% of the not-connected' }) +
-        row('Third attempt not done yet', f.nc_3rd_pending, f.not_connected ? Math.round(f.nc_3rd_pending * 1000 / f.not_connected) / 10 : 0, 'warn', { sub: true, hint: 'had 2 calls, needs a 3rd' }) +
+        row('Third attempt not done yet', f.nc_3rd_pending, f.not_connected ? Math.round(f.nc_3rd_pending * 1000 / f.not_connected) / 10 : 0, 'warn', { sub: true, hint: 'tried 2 times, needs a 3rd' }) +
         row('Not attempted yet', f.not_attempted, f.not_attempted_pct, 'all') +
         row('Still pending <small>(no final decision)</small>', f.pending, f.pending_pct, 'all') +
-        '<div class="fu-sep">Closed without a call - not part of the funnel above</div>' +
-        row('Confirmed by WhatsApp / IVR / sheet', f.confirmed_without_call, f.confirmed_without_call_pct, 'all', { sub: true }) +
-        row('Cancelled (auto-cancel / customer / other)', f.cancelled_without_call, f.cancelled_without_call_pct, 'all', { sub: true });
+        '<div class="fu-sep">Of the confirmed and cancelled above, decided without a phone call</div>' +
+        row('Confirmed on WhatsApp / IVR / sheet', f.confirmed_without_call, f.confirmed_without_call_pct, 'all', { sub: true }) +
+        row('Cancelled on WhatsApp / IVR / sheet / other', f.cancelled_without_call, f.cancelled_without_call_pct, 'all', { sub: true });
 
       var nc = p.not_connected;
       var board =

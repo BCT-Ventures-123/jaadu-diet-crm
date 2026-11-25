@@ -135,7 +135,7 @@
     function codHtml(e) {
       var h = '<h3>End to end: from every COD order to the confirmation</h3><div class="rp-what">Every percentage is a share of the <b>COD orders</b> placed in these dates. Prepaid orders ship directly and are not counted. Calls, IVR and WhatsApp all count. Goal: <b>' + e.goal + '% confirmed</b>.</div><div class="rp-card">' +
         '<div class="rp-row hd"><div>Measure</div><div style="text-align:right">Count</div><div style="text-align:right">%</div></div>';
-      e.table.forEach(function (x) { var lead = x.base ? ((x.pct != null && x.pct !== 100 ? '% ' : '') + x.base) : '', hint = lead + (x.hint ? (lead ? ' · ' : '') + x.hint : ''); h += row(esc(x.label), x.count, x.pct == null ? '' : x.pct + '%', x.tone, { hint: esc(hint) }); });
+      e.table.forEach(function (x) { var lead = x.base ? ((x.pct != null && x.pct !== 100 ? '% ' : '') + x.base) : '', hint = lead + (x.hint ? (lead ? ' · ' : '') + x.hint : ''); h += row(esc(x.label), x.count, x.pct == null ? '' : x.pct + '%', x.tone, { hint: esc(hint), sub: !!x.sub }); });
       h += '</div>';
       var red = function (v, bad, strong) { return '<span style="' + (bad ? 'color:var(--ds-danger);font-weight:800' : '') + '">' + (v == null ? '—' : v + '%') + '</span>'; };
       var cells = function (x, label) {
@@ -162,25 +162,9 @@
         tile('Orders dialled in these dates', a.orders_dialled, num(a.calls_on_period_orders) + ' calls on the new orders · ' + num(a.calls_on_older_orders) + ' calls on older orders', 'ok') +
         tile('Calls made in these dates', a.calls, a.picked_pct + '% picked up', '') + '</div>';
       if (d.analysis) h += overviewHtml(d.analysis);
-      // A
-      h += '<h3><b>A.</b> Orders placed in these dates</h3><div class="rp-what">Orders that came in on the chosen dates, and what has happened to them since. Percentages are of orders placed.</div><div class="rp-card">' +
-        '<div class="rp-row hd"><div>Measure</div><div style="text-align:right">Orders</div><div style="text-align:right">% of orders</div></div>' +
-        row('Total orders', T, T ? '100%' : '-', '', { hint: 'COD tea orders, test and prepaid left out' }) +
-        row('Called at least once', c.attempted, pct(c.attempted, T)) +
-        row('Not called yet', c.not_attempted, pct(c.not_attempted, T), c.not_attempted ? 'warn' : '', { hint: (d.not_called_why ? num(d.not_called_why.ready_in_fresh_list || 0) + ' waiting in the Fresh list, the rest held or closed (see D below)' : '') }) +
-        row('Total attempts', c.total_attempts, '', '', { sub: true, hint: 'every call on these orders so far, even after these dates' }) +
-        row('Connected', c.connected, pct(c.connected, T), '', { hint: 'customer spoke on a call' }) +
-        row('Confirmed on a call', c.confirmed, pct(c.confirmed, T), 'ok') +
-        row('Cancelled on a call', c.cancelled, pct(c.cancelled, T), 'bad') +
-        row('Not connected', c.not_connected, pct(c.not_connected, T), c.not_connected ? 'warn' : '', { hint: 'called, never picked up' }) +
-        row('2nd attempt done', c.nc_2nd, pct(c.nc_2nd, c.not_connected), '', { sub: true, hint: '% of not connected' }) +
-        row('2nd attempt NOT done', c.nc_2nd_pending, pct(c.nc_2nd_pending, c.not_connected), c.nc_2nd_pending ? 'warn' : '', { sub: true }) +
-        row('3rd attempt done', c.nc_3rd, pct(c.nc_3rd, c.not_connected), '', { sub: true }) +
-        row('3rd attempt NOT done', c.nc_3rd_pending, pct(c.nc_3rd_pending, c.not_connected), c.nc_3rd_pending ? 'warn' : '', { sub: true }) +
-        row('Closed without a call', (c.confirmed_without_call || 0) + (c.cancelled_without_call || 0) + (c.other_closed || 0), pct((c.confirmed_without_call || 0) + (c.cancelled_without_call || 0) + (c.other_closed || 0), T), '', { hint: 'WhatsApp, IVR, sheet or auto. Confirmed ' + num(c.confirmed_without_call) + ', cancelled ' + num(c.cancelled_without_call) }) +
-        '</div>';
+      // (old section A removed 2026-11-25: its call-only numbers duplicated the End to end block above with a different meaning of connected; the retry rows now sit in that block)
       // B
-      h += '<h3><b>B.</b> Calls made in these dates</h3><div class="rp-what">Every call the team made on the chosen dates, on any order. These are calls, not orders.</div><div class="rp-grid">' +
+      h += '<h3><b>A.</b> Calls made in these dates</h3><div class="rp-what">Every call the team made on the chosen dates, on any order. These are calls, not orders.</div><div class="rp-grid">' +
         tile('Calls made', a.calls, num(a.orders_dialled) + ' different orders dialled', '') +
         tile('Picked up', a.picked, a.picked_pct + '% of calls', 'ok') +
         tile('No answer', a.no_answer, pct(a.no_answer, a.calls) + ' of calls', a.no_answer ? 'warn' : '') +
@@ -189,7 +173,7 @@
         tile('Callbacks set', a.callbacks, 'calls', '') + tile('Address fixes', a.address_fix, 'calls', '') + tile('Wrong numbers', a.wrong_number, 'orders', '') + '</div>' +
         '<div class="rp-recon"><b>' + num(a.calls) + '</b> calls made = <b>' + num(a.calls_on_period_orders) + '</b> on orders placed in these dates + <b>' + num(a.calls_on_older_orders) + '</b> on older orders.</div>';
       // C
-      h += '<h3><b>C.</b> Open right now (all dates)</h3><div class="rp-what">What is waiting for a call today, regardless of the dates above (last ' + d.backlog.window_days + ' days of orders).</div><div class="rp-grid">' +
+      h += '<h3><b>B.</b> Open right now (all dates)</h3><div class="rp-what">What is waiting for a call today, regardless of the dates above (last ' + d.backlog.window_days + ' days of orders).</div><div class="rp-grid">' +
         tile('To call now', p.to_call_now, 'fresh + not connected + callbacks due', 'warn', 'to_call_now') +
         tile('Fresh, not called', p.fresh, num(Math.min(p.fresh, (d.backlog.fresh_why || {}).ready_in_fresh_list || 0)) + ' ready in the Fresh list · ' + num(Math.max(0, p.fresh - ((d.backlog.fresh_why || {}).ready_in_fresh_list || 0))) + ' held (repeat / earlier order / duplicate)<br>By age: ' + num(age.under_1d) + ' under 1 day · ' + num(age.d1_to_3) + ' 1–3 days · ' + num(age.over_3d) + ' over 3 days', p.fresh ? 'warn' : '', 'fresh') +
         tile('Not connected', p.not_connected, num(p.nc_1) + ' with 1 call · ' + num(p.nc_2) + ' with 2 · ' + num(p.nc_3_plus) + ' with 3+', '', 'not_connected') +
@@ -203,7 +187,7 @@
         d.by_agent.map(function (x) { return '<tr><td>' + esc(x.name) + '</td><td>' + (x.team === 'CC' ? 'Call centre' : 'Aman') + '</td><td>' + num(x.calls) + '</td><td>' + num(x.orders_dialled) + '</td><td>' + num(x.picked) + '</td><td>' + pct(x.picked, x.calls) + '</td><td>' + num(x.no_answer) + '</td><td>' + num(x.confirmed) + '</td><td>' + num(x.cancelled) + '</td><td>' + num(x.callbacks) + '</td><td>' + num(x.address_fix) + '</td><td>' + num(x.wrong_number) + '</td><td>' + num(x.calls_on_period_orders) + '</td><td>' + num(x.calls - x.calls_on_period_orders) + '</td></tr>'; }).join('') || '<tr><td colspan="14" style="text-align:center;color:var(--ds-muted)">No calls on these dates</td></tr>');
       if (d.freshness) {
         var w = d.not_called_why || {}, ago = function (iso) { if (!iso) return 'never'; var m = Math.round((Date.now() - new Date(iso)) / 60000); var when = new Date(iso).toLocaleString('en-IN', { timeZone: TZ, day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }); return when + ' (' + (m < 60 ? m + ' min ago' : m < 2880 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' days ago') + ')'; };
-        h += '<h3><b>D.</b> Data check</h3><div class="rp-what">Why some orders are not called yet, and how fresh the data is. Use this to spot a stopped feed or a team that is not logging calls.</div><div class="rp-card">' +
+        h += '<h3><b>C.</b> Data check</h3><div class="rp-what">Why some orders are not called yet, and how fresh the data is. Use this to spot a stopped feed or a team that is not logging calls.</div><div class="rp-card">' +
           '<div class="rp-row hd"><div>Orders placed in these dates that nobody has called</div><div style="text-align:right">Orders</div><div></div></div>' +
           row('Waiting in the agents\' Fresh list', w.ready_in_fresh_list || 0, '', (w.ready_in_fresh_list || 0) ? 'warn' : '', { hint: 'these are the ones to call' }) +
           row('Held: repeat customer', w.repeat_customer || 0, '', '', { hint: 'goes to Aman\'s repeat queue, not the Fresh list' }) +

@@ -561,12 +561,12 @@ async function loadKPI() {
   try {
     const r = await fetch(API + '/api/kpi');
     const d = await r.json();
-    var h = '<div class="kpi-card blue"><div class="value">'+(d.today_orders||0)+'</div><div class="label">Today Orders</div></div>'+
+    var h = '<div class="kpi-card blue"><div class="value">'+(d.today_orders||0)+'</div><div class="label">Today COD Orders</div></div>'+
       '<div class="kpi-card green"><div class="value">'+(d.today_confirmed||0)+'</div><div class="label">Confirmed</div></div>'+
       '<div class="kpi-card red"><div class="value">'+(d.today_cancelled||0)+'</div><div class="label">Cancelled</div></div>'+
       '<div class="kpi-card purple"><div class="value">'+(d.pending_inhouse||0)+'</div><div class="label">Pending Aman</div></div>'+
       '<div class="kpi-card yellow"><div class="value">'+(d.pending_cc||0)+'</div><div class="label">Pending CC</div></div>'+
-      '<div class="kpi-card green"><div class="value">'+(d.today_confirm_rate||0)+'%</div><div class="label">Confirm Rate</div></div>'+
+      '<div class="kpi-card green"><div class="value">'+(d.today_confirm_rate||0)+'%</div><div class="label">Confirm Rate (COD)</div></div>'+
       '<div class="kpi-card blue"><div class="value">'+(d.active_ndr||0)+'</div><div class="label">Active NDR</div></div>'+
       '<div class="kpi-card red"><div class="value">'+(d.pending_duplicates||0)+'</div><div class="label">Duplicates</div></div>'+
       '<div class="kpi-card green"><div class="value">'+(d.today_prepaid_conversions||0)+'</div><div class="label">Prepaid Conv</div></div>';
@@ -578,7 +578,7 @@ async function loadKPI() {
       h += '<div class="kpi-card '+(cov1ok?'green':'red')+'"><div class="value">'+c.attempt_1_coverage_pct+'%</div><div class="label">1st Attempt Coverage</div></div>'+
         '<div class="kpi-card green"><div class="value">'+c.attempt_1_connectivity_pct+'%</div><div class="label">1st Attempt Connectivity</div></div>'+
         '<div class="kpi-card green"><div class="value">'+c.overall_connectivity_pct+'%</div><div class="label">Overall Connectivity</div></div>'+
-        '<div class="kpi-card yellow"><div class="value">'+c.not_called+'</div><div class="label">Not Called Yet</div></div>';
+        '<div class="kpi-card yellow"><div class="value">'+c.not_called+'</div><div class="label">Not Tried Yet</div></div>';
     } catch(e2) {}
     document.getElementById('kpiRibbon').innerHTML = h;
   } catch(e) { console.error('KPI error:', e); }
