@@ -1572,6 +1572,7 @@ module.exports = function mountCcRoutes(app, deps) {
             COUNT(DISTINCT m.order_id) FILTER (WHERE m.read_at IS NOT NULL)::int AS read,
             COUNT(DISTINCT m.order_id) FILTER (WHERE m.status = 'failed')::int AS failed,
             COUNT(DISTINCT m.order_id) FILTER (WHERE e.event = 'clicked_confirm')::int AS confirm,
+            COUNT(DISTINCT m.order_id) FILTER (WHERE e.event = 'clicked_confirm' AND e.applied = 'confirmed_order')::int AS confirmed_here,
             COUNT(DISTINCT m.order_id) FILTER (WHERE e.event = 'clicked_cancel')::int AS cancel,
             COUNT(DISTINCT m.order_id) FILTER (WHERE e.event = 'clicked_change_address')::int AS change_address,
             COUNT(DISTINCT m.order_id) FILTER (WHERE e.event = 'replied_text')::int AS replied
@@ -1582,7 +1583,7 @@ module.exports = function mountCcRoutes(app, deps) {
       }
       let shipping = [], shipReplies = []; try { const nfy = require('./lib/waNotify'); shipping = await nfy.report(db, r.from, r.to); shipReplies = await nfy.replies(db, r.from, r.to); } catch (e) { console.error('[WA] shipping report failed:', e.message); }
       res.json({ from: r.from, to: r.to, orders: rows.length, orders_messaged: messaged, orders_messaged_pct: rows.length ? Math.round(messaged * 1000 / rows.length) / 10 : null, confirmed_by_whatsapp: confirmedByWa, shipping, ship_replies: shipReplies,
-        bridge_has_data: steps.length > 0, steps: steps.map(s => ({ ...s, label: LABEL[s.step] || ('Message ' + (s.step + 1)), no_response: Math.max(0, s.sent - Math.max(s.confirm + s.cancel + s.change_address, s.replied)) })) });
+        bridge_has_data: steps.length > 0, steps: steps.map((s, i) => ({ ...s, confirmed_so_far: steps.slice(0, i + 1).reduce((a, x) => a + (x.confirmed_here || 0), 0), label: LABEL[s.step] || ('Message ' + (s.step + 1)), no_response: Math.max(0, s.sent - Math.max(s.confirm + s.cancel + s.change_address, s.replied)) })) });
     } catch (err) { sendError(res, err); }
   });  app.get('/api/cc/lead-audit', async (req, res) => {
     try {
