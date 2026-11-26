@@ -1589,13 +1589,17 @@ module.exports = function mountCcRoutes(app, deps) {
         confirmedByWa = (await dbOne(`SELECT COUNT(DISTINCT e.order_id)::int AS n FROM wa_events e JOIN orders_master o ON o.id = e.order_id WHERE e.order_id = ANY($1)
           AND ((e.event = 'clicked_confirm' AND e.applied = 'confirmed_order') OR (e.event = 'clicked_change_address' AND o.confirmation_status = 'confirmed'))`, [ids])).n || 0;
         // Responses (owner 2026-11-26): how many ORDERS answered, whichever message they answered. Every figure is a share of all the COD orders placed on these dates, never of the messages sent.
-        responses = await dbOne(`SELECT COUNT(DISTINCT e.order_id) FILTER (WHERE e.event = 'clicked_confirm')::int AS confirm_tap, COUNT(DISTINCT e.order_id) FILTER (WHERE e.event = 'clicked_cancel')::int AS cancel_tap,
-            COUNT(DISTINCT e.order_id) FILTER (WHERE e.event = 'clicked_change_address')::int AS change_tap, COUNT(DISTINCT e.order_id) FILTER (WHERE e.event = 'replied_text')::int AS replied,
-            COUNT(DISTINCT e.order_id)::int AS any_response,
-            COUNT(DISTINCT e.order_id) FILTER (WHERE e.event = 'clicked_change_address' AND o.confirmation_status = 'confirmed')::int AS change_now_confirmed,
-            COUNT(DISTINCT e.order_id) FILTER (WHERE e.event = 'clicked_cancel' AND o.confirmation_status = 'cancelled')::int AS cancel_now_cancelled
-          FROM wa_events e JOIN wa_messages m ON m.send_id = e.send_id JOIN orders_master o ON o.id = e.order_id
-          WHERE e.order_id = ANY($1) AND m.step <= 4 AND NOT m.is_test AND e.event IN ('clicked_confirm', 'clicked_cancel', 'clicked_change_address', 'replied_text')`, [ids]);
+        // Each ORDER that answered is counted ONCE, in the first of these that applies: Cancel, Change address, Confirm, reply only. So the four lines add up to the total (cat_*). The tap counts (confirm_tap ...) are overlapping: one order can do several things.
+        responses = await dbOne(`SELECT COUNT(*) FILTER (WHERE c)::int AS cat_cancel, COUNT(*) FILTER (WHERE a AND NOT c)::int AS cat_change, COUNT(*) FILTER (WHERE k AND NOT c AND NOT a)::int AS cat_confirm,
+            COUNT(*) FILTER (WHERE r AND NOT c AND NOT a AND NOT k)::int AS cat_reply_only, COUNT(*)::int AS any_response,
+            COUNT(*) FILTER (WHERE k)::int AS confirm_tap, COUNT(*) FILTER (WHERE c)::int AS cancel_tap, COUNT(*) FILTER (WHERE a)::int AS change_tap, COUNT(*) FILTER (WHERE r)::int AS replied,
+            COUNT(*) FILTER (WHERE a AND st = 'confirmed')::int AS change_now_confirmed, COUNT(*) FILTER (WHERE c AND st = 'cancelled')::int AS cancel_now_cancelled,
+            COUNT(*) FILTER (WHERE k AND ok)::int AS confirm_by_tap, COUNT(*) FILTER (WHERE k AND NOT ok AND st = 'confirmed')::int AS confirm_already, COUNT(*) FILTER (WHERE k AND NOT ok AND st <> 'confirmed')::int AS confirm_not_confirmed
+          FROM (SELECT e.order_id, o.confirmation_status AS st, BOOL_OR(e.event = 'clicked_confirm') AS k, BOOL_OR(e.event = 'clicked_cancel') AS c, BOOL_OR(e.event = 'clicked_change_address') AS a, BOOL_OR(e.event = 'replied_text') AS r,
+                       BOOL_OR(e.event = 'clicked_confirm' AND e.applied = 'confirmed_order') AS ok
+                FROM wa_events e JOIN wa_messages m ON m.send_id = e.send_id JOIN orders_master o ON o.id = e.order_id
+                WHERE e.order_id = ANY($1) AND m.step <= 4 AND NOT m.is_test AND e.event IN ('clicked_confirm', 'clicked_cancel', 'clicked_change_address', 'replied_text')
+                GROUP BY e.order_id, o.confirmation_status) p`, [ids]);
       }
       let shipping = [], shipReplies = []; try { const nfy = require('./lib/waNotify'); shipping = await nfy.report(db, r.from, r.to); shipReplies = await nfy.replies(db, r.from, r.to); } catch (e) { console.error('[WA] shipping report failed:', e.message); }
       res.json({ from: r.from, to: r.to, orders: rows.length, orders_messaged: messaged, orders_messaged_pct: rows.length ? Math.round(messaged * 1000 / rows.length) / 10 : null, confirmed_by_whatsapp: confirmedByWa, responses, shipping, ship_replies: shipReplies,
