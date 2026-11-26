@@ -1044,8 +1044,10 @@ module.exports = function mountCcRoutes(app, deps) {
     rows.forEach(o => { o.skus = productsLib.skusOf(o.items); });
     return rows;
   }
+  // The decider of an order. Owner 2026-11-26: a customer who taps Change address on WhatsApp, and whose address is then fixed, is a WhatsApp confirmation (confirmed + change address): the order is credited to WhatsApp, not to the caller who typed the address.
+  let cohortWaAddr = true;
   async function fetchCohortRows(r, team, productKey) {
-    return db(
+    const run = (withWa) => db(
       `SELECT o.id, o.order_name, o.total_price AS amount, o.assigned_to AS team,
               COALESCE((SELECT jsonb_agg(jsonb_build_object('t', li->>'title', 'q', COALESCE(NULLIF(li->>'quantity','')::int, 1))) FROM jsonb_array_elements(${ITEMS_SQL}) li), '[]'::jsonb) AS items, o.confirmation_status AS status, o.order_status, COALESCE(o.dnc,FALSE) AS dnc, o.callback_at,
               COALESCE(o.address_is_short,FALSE) AS short, COALESCE(o.address_fixed,FALSE) AS fixed, COALESCE(o.address_locked,FALSE) AS locked,
@@ -1056,7 +1058,7 @@ module.exports = function mountCcRoutes(app, deps) {
               COALESCE(c.d, '{}') AS calls, COALESCE(c.t, '{}') AS call_times,
               (o.shipped_at IS NOT NULL OR COALESCE(o.order_status,'') IN ('shipped','delivered','rto')) AS shipped,
               (COALESCE(o.order_status,'') = 'rto' OR o.rto_status IS NOT NULL) AS rto,
-              dec.actor AS actor, dec.role AS actor_role
+              ${withWa ? `CASE WHEN (o.confirmation_status = 'confirmed' AND EXISTS (SELECT 1 FROM wa_events w WHERE w.order_id = o.id AND w.event = 'clicked_change_address')) THEN 'whatsapp' ELSE dec.actor END AS actor, CASE WHEN (o.confirmation_status = 'confirmed' AND EXISTS (SELECT 1 FROM wa_events w WHERE w.order_id = o.id AND w.event = 'clicked_change_address')) THEN NULL ELSE dec.role END AS actor_role` : 'dec.actor AS actor, dec.role AS actor_role'}
        FROM orders_master o
        LEFT JOIN LATERAL (
          SELECT array_agg(g.disposition ORDER BY g.created_at) AS d, array_agg(g.created_at ORDER BY g.created_at) AS t
@@ -1069,6 +1071,8 @@ module.exports = function mountCcRoutes(app, deps) {
          AND o.total_price >= $5
          AND EXISTS (SELECT 1 FROM jsonb_array_elements(${ITEMS_SQL}) li, unnest($6::text[]) p WHERE starts_with(COALESCE(li->>'title',''), p))`,
       [r.start, r.end, cfg.CALL_DISPOSITIONS, teamList(team), productsLib.MIN_PRICE, productPrefixes(productKey)]);
+    if (cohortWaAddr) { try { return await run(true); } catch (e) { if (!/wa_events/.test(String(e && e.message))) throw e; cohortWaAddr = false; } }      // an older database without the WhatsApp tables
+    return run(false);
   }
 
   // Prepaid orders placed on each order date, with the same real-tea, minimum-price and no-test rules as the COD cohort. They are never called,
@@ -1564,7 +1568,7 @@ module.exports = function mountCcRoutes(app, deps) {
       const rows = await fetchCohortRows(r, null, null), ids = rows.map(o => o.id);
       const has = ids.length ? (await dbOne(`SELECT to_regclass('wa_messages') AS t`)).t : null;
       const LABEL = ['Message 1: sent at once', 'Message 2: 4 hours later', 'Message 3: 8 hours after the first', 'Message 4: the next morning', 'Message 5: the morning after'];
-      let steps = [], messaged = 0, confirmedByWa = 0;
+      let steps = [], messaged = 0, confirmedByWa = 0, responses = null;
       if (has) {
         steps = await db(`SELECT m.step,
             COUNT(DISTINCT m.order_id) FILTER (WHERE m.sent_at IS NOT NULL)::int AS sent,
@@ -1572,17 +1576,29 @@ module.exports = function mountCcRoutes(app, deps) {
             COUNT(DISTINCT m.order_id) FILTER (WHERE m.read_at IS NOT NULL)::int AS read,
             COUNT(DISTINCT m.order_id) FILTER (WHERE m.status = 'failed')::int AS failed,
             COUNT(DISTINCT m.order_id) FILTER (WHERE e.event = 'clicked_confirm')::int AS confirm,
-            COUNT(DISTINCT m.order_id) FILTER (WHERE e.event = 'clicked_confirm' AND e.applied = 'confirmed_order')::int AS confirmed_here,
+            COUNT(DISTINCT m.order_id) FILTER (WHERE (e.event = 'clicked_confirm' AND e.applied = 'confirmed_order')
+              OR (e.event = 'clicked_change_address' AND o.confirmation_status = 'confirmed' AND e.id = (SELECT MIN(y.id) FROM wa_events y WHERE y.order_id = m.order_id AND y.event = 'clicked_change_address')
+                  AND NOT EXISTS (SELECT 1 FROM wa_events x WHERE x.order_id = m.order_id AND x.event = 'clicked_confirm' AND x.applied = 'confirmed_order')))::int AS confirmed_here,
             COUNT(DISTINCT m.order_id) FILTER (WHERE e.event = 'clicked_cancel')::int AS cancel,
             COUNT(DISTINCT m.order_id) FILTER (WHERE e.event = 'clicked_change_address')::int AS change_address,
             COUNT(DISTINCT m.order_id) FILTER (WHERE e.event = 'replied_text')::int AS replied
-          FROM wa_messages m LEFT JOIN wa_events e ON e.send_id = m.send_id
+          FROM wa_messages m JOIN orders_master o ON o.id = m.order_id LEFT JOIN wa_events e ON e.send_id = m.send_id
           WHERE m.order_id = ANY($1) AND m.step <= 4 AND NOT m.is_test GROUP BY m.step ORDER BY m.step`, [ids]);
         messaged = (await dbOne(`SELECT COUNT(DISTINCT order_id)::int AS n FROM wa_messages WHERE order_id = ANY($1) AND step <= 4 AND NOT is_test AND sent_at IS NOT NULL`, [ids])).n || 0;
-        confirmedByWa = (await dbOne(`SELECT COUNT(DISTINCT order_id)::int AS n FROM wa_events WHERE order_id = ANY($1) AND event = 'clicked_confirm' AND applied = 'confirmed_order'`, [ids])).n || 0;
+        // Confirmed on WhatsApp = the customer tapped Confirm (and the order was confirmed by it) + the customer tapped Change address and the order is confirmed now (owner 2026-11-26). An order counts once.
+        confirmedByWa = (await dbOne(`SELECT COUNT(DISTINCT e.order_id)::int AS n FROM wa_events e JOIN orders_master o ON o.id = e.order_id WHERE e.order_id = ANY($1)
+          AND ((e.event = 'clicked_confirm' AND e.applied = 'confirmed_order') OR (e.event = 'clicked_change_address' AND o.confirmation_status = 'confirmed'))`, [ids])).n || 0;
+        // Responses (owner 2026-11-26): how many ORDERS answered, whichever message they answered. Every figure is a share of all the COD orders placed on these dates, never of the messages sent.
+        responses = await dbOne(`SELECT COUNT(DISTINCT e.order_id) FILTER (WHERE e.event = 'clicked_confirm')::int AS confirm_tap, COUNT(DISTINCT e.order_id) FILTER (WHERE e.event = 'clicked_cancel')::int AS cancel_tap,
+            COUNT(DISTINCT e.order_id) FILTER (WHERE e.event = 'clicked_change_address')::int AS change_tap, COUNT(DISTINCT e.order_id) FILTER (WHERE e.event = 'replied_text')::int AS replied,
+            COUNT(DISTINCT e.order_id)::int AS any_response,
+            COUNT(DISTINCT e.order_id) FILTER (WHERE e.event = 'clicked_change_address' AND o.confirmation_status = 'confirmed')::int AS change_now_confirmed,
+            COUNT(DISTINCT e.order_id) FILTER (WHERE e.event = 'clicked_cancel' AND o.confirmation_status = 'cancelled')::int AS cancel_now_cancelled
+          FROM wa_events e JOIN wa_messages m ON m.send_id = e.send_id JOIN orders_master o ON o.id = e.order_id
+          WHERE e.order_id = ANY($1) AND m.step <= 4 AND NOT m.is_test AND e.event IN ('clicked_confirm', 'clicked_cancel', 'clicked_change_address', 'replied_text')`, [ids]);
       }
       let shipping = [], shipReplies = []; try { const nfy = require('./lib/waNotify'); shipping = await nfy.report(db, r.from, r.to); shipReplies = await nfy.replies(db, r.from, r.to); } catch (e) { console.error('[WA] shipping report failed:', e.message); }
-      res.json({ from: r.from, to: r.to, orders: rows.length, orders_messaged: messaged, orders_messaged_pct: rows.length ? Math.round(messaged * 1000 / rows.length) / 10 : null, confirmed_by_whatsapp: confirmedByWa, shipping, ship_replies: shipReplies,
+      res.json({ from: r.from, to: r.to, orders: rows.length, orders_messaged: messaged, orders_messaged_pct: rows.length ? Math.round(messaged * 1000 / rows.length) / 10 : null, confirmed_by_whatsapp: confirmedByWa, responses, shipping, ship_replies: shipReplies,
         bridge_has_data: steps.length > 0, steps: steps.map((s, i) => ({ ...s, confirmed_so_far: steps.slice(0, i + 1).reduce((a, x) => a + (x.confirmed_here || 0), 0), label: LABEL[s.step] || ('Message ' + (s.step + 1)), no_response: Math.max(0, s.sent - Math.max(s.confirm + s.cancel + s.change_address, s.replied)) })) });
     } catch (err) { sendError(res, err); }
   });  app.get('/api/cc/lead-audit', async (req, res) => {
