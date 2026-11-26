@@ -93,15 +93,15 @@
     var h = detailOnly ? ladderHtml(F.ladder, key) : '<h3>Where the ' + num(n) + ' orders stand' + (own ? ' (' + esc(ch.short) + ')' : '') + '</h3><div class="hm-sub">Every percentage is a share of these ' + num(n) + ' orders. ' +
       (own ? 'The same ' + num(n) + ' orders as Overall, split by channel. Each order is counted once, so Aman, the call centre, the IVR and WhatsApp add up to Overall.' : 'Attempted counts every channel: a call by Aman or the call centre, a real IVR call, or WhatsApp.') + (key === 'wa' || key === 'overall' ? ' Until the WhatsApp bridge is live, messages sent are not stored, so WhatsApp counts only the customers who replied.' : '') + '</div>' +
       table(['', 'Orders', '% of orders', 'Share', 'What it means'], rows, ['l', 'r', 'r', 'r', 'm']) + (after || '') + ladderHtml(F.ladder, key);
-    if (!own) {                                                                          // the channel views show the lead ladder above instead (a different base: leads tried by that channel)
-      h += '<h3>First attempt</h3>' + table(['', 'Orders', '% of attempted'], [
-        ['First attempt made', num(F.attempted), F.attempted ? '100%' : '—'],
-        ['Answered on the first attempt', num(F.first_connected), pc(F.first_connected_pct)],
-        ['Not answered on the first attempt', num(F.first_not_connected), pc(F.first_not_connected_pct)]]);
-      h += '<h3>Orders nobody answered: 2nd and 3rd attempt</h3><div class="hm-sub">' + num(nc) + ' orders were attempted and nobody has answered. "Same day" means the same day as the first attempt.</div>' +
+    if (!own) {                                                                          // the channel views show the lead ladder above instead (also a share of all COD orders)
+      h += '<h3>First attempt</h3><div class="hm-sub">Every percentage is a share of all <b>' + num(n) + ' COD orders</b>, never of the orders attempted.</div>' + table(['', 'Orders', '% of COD orders'], [
+        ['First attempt made', num(F.attempted), pc(ratio(F.attempted, n))],
+        ['Answered on the first attempt', num(F.first_connected), pc(ratio(F.first_connected, n))],
+        ['Not answered on the first attempt', num(F.first_not_connected), pc(ratio(F.first_not_connected, n))]]);
+      h += '<h3>Orders nobody answered: 2nd and 3rd attempt</h3><div class="hm-sub">' + num(nc) + ' orders were attempted and nobody has answered. "Same day" means the same day as the first attempt. Every percentage is a share of all ' + num(n) + ' COD orders.</div>' +
         table(['', 'Done the same day', 'Done on a later day', 'Not done yet'], [
-          ['2nd attempt', cell(F.second_same_day, ratio(F.second_same_day, nc)), cell(F.second_later_day, ratio(F.second_later_day, nc)), cell(F.second_not_yet, ratio(F.second_not_yet, nc))],
-          ['3rd attempt', cell(F.third_same_day, ratio(F.third_same_day, nc)), cell(F.third_later_day, ratio(F.third_later_day, nc)), cell(F.third_not_yet, ratio(F.third_not_yet, nc))]]);
+          ['2nd attempt', cell(F.second_same_day, ratio(F.second_same_day, n)), cell(F.second_later_day, ratio(F.second_later_day, n)), cell(F.second_not_yet, ratio(F.second_not_yet, n))],
+          ['3rd attempt', cell(F.third_same_day, ratio(F.third_same_day, n)), cell(F.third_later_day, ratio(F.third_later_day, n)), cell(F.third_not_yet, ratio(F.third_not_yet, n))]]);
     }
     if (!own) h += '<h3>Same-day shipping</h3><div class="hm-sub">An order confirmed before the 2 PM lock ships the same day (packing 2 to 4 PM, courier pickup at 4 PM). Only orders placed before 1 PM can make it. Percentages are a share of those orders.</div>' + table(['', 'Orders', '% of these orders'], [
       { cls: 'tot', cells: ['Orders placed before 1 PM', num(F.ship_pool), F.ship_pool ? '100%' : '—'] },
@@ -168,9 +168,22 @@
       days.map(function (x) { return [dayLabel(x.day), num(x.fresh.pool), cell(x.fresh.attempted_by_cut, x.fresh.attempted_by_cut_pct), cell(x.fresh.confirmed_by_cut, x.fresh.confirmed_by_cut_pct), num(x.old.pool), cell(x.old.reached, x.old.reached_pct), cell(x.old.confirmed_by_cut, x.old.confirmed_by_cut_pct)]; }));
     return h;
   }  // WhatsApp per message: how many orders each message reached and what the customers did. Counts orders, not messages.
+  // Total responses (owner 2026-11-26): COD orders first, then how many ORDERS tapped Confirm, Cancel, Change address or wrote back, and the total that responded at all. Every percentage is a share of all the COD orders, never of the messages sent.
+  function respH(W) {
+    var R = W.responses; if (!R || !W.orders) return '';
+    var n = W.orders, o = function (v) { return cell(v, ratio(v, n)); }, none = Math.max(0, n - R.any_response);
+    return '<h3>Responses on WhatsApp</h3><div class="hm-sub">Every percentage is a share of the <b>' + num(n) + ' COD orders</b> placed on these dates. An order counts once, whichever message it answered.</div>' + table(['', 'Orders', 'What it means'], [
+      ['<b>COD orders</b>', '<b>' + num(n) + '</b> (100%)', 'the base of every percentage here'],
+      ['Tapped Confirm', o(R.confirm_tap), 'the tap confirmed the order, or it was already confirmed another way'],
+      ['Tapped Cancel', o(R.cancel_tap), R.cancel_now_cancelled + ' of them are cancelled now; the others were called back by a caller'],
+      ['Tapped Change address', o(R.change_tap), R.change_now_confirmed + ' of them are confirmed now: a caller fixed the address, and that counts as a WhatsApp confirmation'],
+      ['Wrote a reply', o(R.replied), 'free text; a caller follows up'],
+      ['<b>Total responses</b>', '<b>' + num(R.any_response) + '</b> <span style="color:var(--ds-muted);font-size:.85em">(' + ratio(R.any_response, n) + '%)</span>', 'orders that answered in any way (Confirm, Cancel, Change address or a reply)'],
+      ['No response yet', o(none), 'orders that have not answered any WhatsApp message']]);
+  }
   function waReportHtml(W) {
     if (!W) return '';
-    var h = '<h3>WhatsApp messages, one by one</h3><div class="hm-sub">Orders placed on these dates: <b>' + num(W.orders) + '</b>. Got at least one WhatsApp message: <b>' + num(W.orders_messaged) + '</b> (' + pc(W.orders_messaged_pct) + '). Confirmed with the WhatsApp button: <b>' + num(W.confirmed_by_whatsapp) + '</b>. Each row counts orders. The 2nd message goes 4 hours after the 1st, the 3rd 4 hours after the 2nd.</div>';
+    var h = '<h3>WhatsApp messages, one by one</h3><div class="hm-sub">Orders placed on these dates: <b>' + num(W.orders) + '</b>. Got at least one WhatsApp message: <b>' + num(W.orders_messaged) + '</b> (' + pc(W.orders_messaged_pct) + '). Confirmed on WhatsApp (Confirm tap + Change address, then confirmed): <b>' + num(W.confirmed_by_whatsapp) + '</b>. Each row counts orders. The 2nd message goes 4 hours after the 1st, the 3rd 4 hours after the 2nd.</div>';
     // Prepaid, out-for-delivery and delivery-failed messages, one row per message name (messages created on these dates).
     var ship = (W.shipping || []).filter(function (x) { return x.sent || x.failed; });
     var shipH = ship.length ? '<h3>Shipping messages, one by one</h3><div class="hm-sub">Prepaid confirmation, out for delivery and delivery failed. Each row counts messages created on these dates. Replies: tapped = customer used a button.</div>' + table(['Message', 'Sent', 'Delivered', 'Read', 'Failed', 'Replied (tapped)'],
@@ -182,8 +195,8 @@
     // Owner 2026-11-26: the base of every confirmation rate is ALL the COD orders placed on these dates (W.orders), never the number of messages sent. Each message adds to the one before it (Confirmed so far).
     // Delivered and Read are delivery rates of the messages themselves, so they stay a share of the orders messaged at that step.
     var all = W.orders, of = function (n) { return cell(n, ratio(n, all)); };
-    return h + '<div class="hm-sub">Delivered and Read are shares of the orders messaged at that step. <b>Every other percentage is a share of all ' + num(all) + ' COD orders</b>, so the steps add up: Confirmed so far = this message plus all the earlier ones.</div>' + table(['', 'Orders messaged', 'Delivered', 'Read', 'Confirmed on this message', 'Confirmed so far', 'Cancel', 'Change address', 'Replied', 'No response yet'],
-      W.steps.map(function (s) { return [esc(s.label), num(s.sent), cell(s.delivered, ratio(s.delivered, s.sent)), cell(s.read, ratio(s.read, s.sent)), of(s.confirmed_here), of(s.confirmed_so_far), of(s.cancel), of(s.change_address), of(s.replied), num(s.no_response)]; })) + shipH;
+    return h + '<div class="hm-sub">Delivered and Read are shares of the orders messaged at that step. <b>Every other percentage is a share of all ' + num(all) + ' COD orders</b>, so the steps add up: Confirmed so far = this message plus all the earlier ones.</div>' + table(['', 'Orders messaged', 'Delivered', 'Read', 'Confirmed on this message (Confirm + Change address)', 'Confirmed so far', 'Cancel', 'Change address', 'Replied', 'No response yet'],
+      W.steps.map(function (s) { return [esc(s.label), num(s.sent), cell(s.delivered, ratio(s.delivered, s.sent)), cell(s.read, ratio(s.read, s.sent)), of(s.confirmed_here), of(s.confirmed_so_far), of(s.cancel), of(s.change_address), of(s.replied), num(s.no_response)]; })) + respH(W) + shipH;
   }  // ===== THE LEDGER PAGES (lib/ledger.js): every number below is added up from one list of orders, so the pages agree =====
   var CHN = [['aman', 'Aman'], ['cc', 'Call centre'], ['ivr', 'IVR'], ['wa', 'WhatsApp']];
   function asOf(L) { return new Date(L.as_of).toLocaleString('en-IN', { timeZone: TZ, day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); }

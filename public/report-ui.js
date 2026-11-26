@@ -76,7 +76,7 @@
         '<div class="rp-card"><div class="rp-row hd"><div>WhatsApp</div><div></div><div></div></div>' + row('Confirmed on WhatsApp', w.confirmed, p1(w.confirmed_pct)) + row('Cancelled on WhatsApp', w.cancelled, '') +
           '<div class="rp-row"><div class="l" style="color:var(--ds-muted)">Reply rate and reply time need the sheet</div><div></div><div></div></div></div>' +
         '<div class="rp-card"><div class="rp-row hd"><div>Manual calling</div><div></div><div></div></div>' + row('Orders called', k.orders_called, pct(k.orders_called, T)) + row('Calls made', k.calls_made, '') +
-          row('Connect rate', k.connected_calls, p1(k.connect_pct), '', { hint: 'calls picked up, of calls made' }) + row('Confirmed on call', k.confirmed, p1(k.confirm_pct_of_called), 'ok', { hint: '% of orders called' }) + row('Cancelled on call', k.cancelled, '') +
+          row('Connect rate', k.connected_calls, p1(k.connect_pct), '', { hint: 'calls picked up, of calls made' }) + row('Confirmed on call', k.confirmed, p1(pct0(k.confirmed, T)), 'ok', { hint: '% of COD orders' }) + row('Cancelled on call', k.cancelled, '') +
           '<div class="rp-row"><div class="l">Order to 1st call<small>median</small></div><div class="n">' + dur(k.median_to_first_call_min) + '</div><div class="p"></div></div>' +
           '<div class="rp-row"><div class="l">Order to 1st connected call<small>median</small></div><div class="n">' + dur(k.median_to_first_connected_min) + '</div><div class="p"></div></div></div>' +
         '<div class="rp-card"><div class="rp-row hd"><div>IVR</div><div></div><div></div></div>' + row('Confirmed on IVR', v.confirmed, '') + row('Cancelled on IVR', v.cancelled, '') +
