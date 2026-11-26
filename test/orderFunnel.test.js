@@ -167,7 +167,9 @@ test('lead ladder: leads by attempt number, and on which attempt the customer wa
   assert.deepEqual(L.rows.map(x => x.leads), [3, 2, 1, 0, 0]);                                                      // 3 leads had a 1st IVR call, 2 a 2nd, 1 a 3rd
   assert.deepEqual(L.rows.map(x => x.connected_here), [1, 1, 0, 0, 0]); assert.deepEqual(L.rows.map(x => x.connected_so_far), [1, 2, 2, 2, 2]);
   assert.deepEqual(L.rows.map(x => x.not_connected_after), [2, 1, 1, 1, 1]);
-  assert.equal(L.rows[0].leads_pct, 60); assert.equal(L.rows[1].connected_so_far_pct, 66.7);
+  assert.equal(L.rows[0].leads_pct, 60);
+  assert.equal(L.rows[0].connected_here_pct, 20); assert.equal(L.rows[1].connected_here_pct, 20);            // 1 of the 5 ORDERS each (not 1 of the 3 and 1 of the 2 leads tried at that attempt)
+  assert.equal(L.rows[0].connected_so_far_pct, 20); assert.equal(L.rows[1].connected_so_far_pct, 40); assert.equal(L.connected_pct, 40);   // cumulative, always of all 5 orders
   const all = F.build(r, tm, 'overall').ladder; assert.equal(all.tried, 4); assert.equal(all.rows[0].leads, 4);        // Overall counts every channel
   assert.equal(F.ladder([], new Map(), ['ivr']).tried_pct, null);
 });
