@@ -179,8 +179,11 @@
     if (rep.length) shipH += '<h3>What customers chose after those messages</h3><div class="hm-sub">The latest answers (alternate number, time slot, new date, new address). The same answers are in the CRM Status sheet, columns O and P.</div>' + table(['Order', 'Answer', 'When'],
       rep.map(function (x) { return [esc(x.order_name || ''), esc(x.label || ''), esc(new Date(x.at).toLocaleString('en-IN', { timeZone: TZ, day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }))]; }));
     if (!W.bridge_has_data) return h + '<div class="hm-flag warn">No WhatsApp messages are recorded for these dates yet. The WhatsApp bridge records every message sent; this table fills as soon as it is live.</div>' + shipH;
-    return h + table(['', 'Orders messaged', 'Delivered', 'Read', 'Confirm', 'Cancel', 'Change address', 'Replied', 'No response yet'],
-      W.steps.map(function (s) { return [esc(s.label), num(s.sent), cell(s.delivered, ratio(s.delivered, s.sent)), cell(s.read, ratio(s.read, s.sent)), cell(s.confirm, ratio(s.confirm, s.sent)), cell(s.cancel, ratio(s.cancel, s.sent)), cell(s.change_address, ratio(s.change_address, s.sent)), cell(s.replied, ratio(s.replied, s.sent)), num(s.no_response)]; })) + shipH;
+    // Owner 2026-11-26: the base of every confirmation rate is ALL the COD orders placed on these dates (W.orders), never the number of messages sent. Each message adds to the one before it (Confirmed so far).
+    // Delivered and Read are delivery rates of the messages themselves, so they stay a share of the orders messaged at that step.
+    var all = W.orders, of = function (n) { return cell(n, ratio(n, all)); };
+    return h + '<div class="hm-sub">Delivered and Read are shares of the orders messaged at that step. <b>Every other percentage is a share of all ' + num(all) + ' COD orders</b>, so the steps add up: Confirmed so far = this message plus all the earlier ones.</div>' + table(['', 'Orders messaged', 'Delivered', 'Read', 'Confirmed on this message', 'Confirmed so far', 'Cancel', 'Change address', 'Replied', 'No response yet'],
+      W.steps.map(function (s) { return [esc(s.label), num(s.sent), cell(s.delivered, ratio(s.delivered, s.sent)), cell(s.read, ratio(s.read, s.sent)), of(s.confirmed_here), of(s.confirmed_so_far), of(s.cancel), of(s.change_address), of(s.replied), num(s.no_response)]; })) + shipH;
   }  // ===== THE LEDGER PAGES (lib/ledger.js): every number below is added up from one list of orders, so the pages agree =====
   var CHN = [['aman', 'Aman'], ['cc', 'Call centre'], ['ivr', 'IVR'], ['wa', 'WhatsApp']];
   function asOf(L) { return new Date(L.as_of).toLocaleString('en-IN', { timeZone: TZ, day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); }
@@ -435,7 +438,7 @@
     var C = S.team.channels, row = C.channels.filter(function (x) { return x.key === 'whatsapp'; })[0] || { confirmed: 0, cancelled: 0 };
     var h = waReportHtml(S.wa) + (S.team.funnel && S.team.funnel.wa ? (S.ledger ? channelLedgerHtml(S.ledger, 'wa') + funnelBlock(S.team.funnel.wa, '', 'wa', '', true) : funnelBlock(S.team.funnel.wa, 'all COD tea orders on the chosen dates', 'wa')) : '') + '<div class="hm-grid">' + card('Confirmed on WhatsApp', num(row.confirmed), 'orders') + card('% of all COD orders', pc(row.confirmed_pct_of_cod), num(C.totals.cod) + ' COD orders') +
       card('Share of all confirmations', pc(row.share_of_confirmed_pct), num(C.totals.confirmed_total) + ' confirmed in total') + card('Cancelled on WhatsApp', num(row.cancelled), 'customer chose cancel') + '</div>';
-    h += '<div class="hm-sub">Messages sent are not stored in the CRM: WhatsApp confirmations come in through the Google Sheet. So this view shows confirmations, not how many messages went out.</div>';
+    h += '<div class="hm-sub">WhatsApp confirmations are counted once per order, whichever message (1st, 2nd or 3rd) the customer answered. Every message sent is stored in the CRM: see the message-by-message table above on this page.</div>';
     h += '<h3>By when the order was placed</h3>' + table(['Placed', 'Orders', 'Confirmed', 'Confirmed %', 'On WhatsApp'], C.windows.map(function (w) { return [esc(w.label), num(w.orders), num(w.confirmed), pc(w.confirmed_pct), num(w.whatsapp)]; }));
     h += '<h3>Day by day</h3>' + table(['Order date', 'Orders', 'Confirmed on WhatsApp', '% of orders'], C.days.map(function (d) { return [dayLabel(d.day), num(d.cod), num(d.whatsapp), pc(d.cod ? Math.round((d.whatsapp / d.cod) * 1000) / 10 : null)]; }));
     return h;
