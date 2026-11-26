@@ -168,18 +168,29 @@
       days.map(function (x) { return [dayLabel(x.day), num(x.fresh.pool), cell(x.fresh.attempted_by_cut, x.fresh.attempted_by_cut_pct), cell(x.fresh.confirmed_by_cut, x.fresh.confirmed_by_cut_pct), num(x.old.pool), cell(x.old.reached, x.old.reached_pct), cell(x.old.confirmed_by_cut, x.old.confirmed_by_cut_pct)]; }));
     return h;
   }  // WhatsApp per message: how many orders each message reached and what the customers did. Counts orders, not messages.
-  // Total responses (owner 2026-11-26): COD orders first, then how many ORDERS tapped Confirm, Cancel, Change address or wrote back, and the total that responded at all. Every percentage is a share of all the COD orders, never of the messages sent.
+  // Responses (owner 2026-11-26). Every percentage is a share of all the COD orders. Three small tables, each adding up on its own:
+  //  1) who responded: each ORDER counted once (Cancel, else Change address, else Confirm, else reply only), so the lines add up to the total;  2) what the Confirm taps did;  3) how the WhatsApp confirmations add up.
   function respH(W) {
     var R = W.responses; if (!R || !W.orders) return '';
-    var n = W.orders, o = function (v) { return cell(v, ratio(v, n)); }, none = Math.max(0, n - R.any_response);
-    return '<h3>Responses on WhatsApp</h3><div class="hm-sub">Every percentage is a share of the <b>' + num(n) + ' COD orders</b> placed on these dates. An order counts once, whichever message it answered.</div>' + table(['', 'Orders', 'What it means'], [
+    var n = W.orders, o = function (v) { return cell(v, ratio(v, n)); }, any = R.any_response, none = Math.max(0, n - any), tap = R.confirm_by_tap || 0, total = W.confirmed_by_whatsapp || 0, viaAddr = Math.max(0, total - tap);
+    var t1 = table(['Who answered (each order counted once)', 'Orders', 'How it is counted'], [
       ['<b>COD orders</b>', '<b>' + num(n) + '</b> (100%)', 'the base of every percentage here'],
-      ['Tapped Confirm', o(R.confirm_tap), 'the tap confirmed the order, or it was already confirmed another way'],
-      ['Tapped Cancel', o(R.cancel_tap), R.cancel_now_cancelled + ' of them are cancelled now; the others were called back by a caller'],
-      ['Tapped Change address', o(R.change_tap), R.change_now_confirmed + ' of them are confirmed now: a caller fixed the address, and that counts as a WhatsApp confirmation'],
-      ['Wrote a reply', o(R.replied), 'free text; a caller follows up'],
-      ['<b>Total responses</b>', '<b>' + num(R.any_response) + '</b> <span style="color:var(--ds-muted);font-size:.85em">(' + ratio(R.any_response, n) + '%)</span>', 'orders that answered in any way (Confirm, Cancel, Change address or a reply)'],
-      ['No response yet', o(none), 'orders that have not answered any WhatsApp message']]);
+      ['<b>Responded in any way</b>', '<b>' + num(any) + '</b> <span style="color:var(--ds-muted);font-size:.85em">(' + ratio(any, n) + '%)</span>', 'the four lines below add up to this: ' + num(R.cat_cancel) + ' + ' + num(R.cat_change) + ' + ' + num(R.cat_confirm) + ' + ' + num(R.cat_reply_only) + ' = ' + num(R.cat_cancel + R.cat_change + R.cat_confirm + R.cat_reply_only)],
+      ['&nbsp;&nbsp;Tapped Cancel', o(R.cat_cancel), num(R.cancel_now_cancelled) + ' are cancelled now; the others were called back by a caller'],
+      ['&nbsp;&nbsp;Tapped Change address', o(R.cat_change), 'counted here if the order did not tap Cancel; ' + num(R.change_now_confirmed) + ' of the ' + num(R.change_tap) + ' who tapped it are confirmed now (a caller fixed the address)'],
+      ['&nbsp;&nbsp;Tapped Confirm', o(R.cat_confirm), 'counted here if the order did not tap Cancel or Change address'],
+      ['&nbsp;&nbsp;Only wrote a message', o(R.cat_reply_only), 'free text, nothing tapped; a caller follows up (' + num(R.replied) + ' orders wrote a message in all)'],
+      ['<b>No response yet</b>', '<b>' + num(none) + '</b> <span style="color:var(--ds-muted);font-size:.85em">(' + ratio(none, n) + '%)</span>', num(any) + ' + ' + num(none) + ' = ' + num(any + none) + ' COD orders']]);
+    var t2 = table(['What the Confirm taps did', 'Orders', 'How it is counted'], [
+      ['<b>Orders that tapped Confirm</b>', '<b>' + num(R.confirm_tap) + '</b> <span style="color:var(--ds-muted);font-size:.85em">(' + ratio(R.confirm_tap, n) + '%)</span>', 'an order that also tapped something else is in this line too, so it can be more than the Confirm line above'],
+      ['&nbsp;&nbsp;The tap confirmed the order', o(R.confirm_by_tap), 'the order was waiting and the tap confirmed it'],
+      ['&nbsp;&nbsp;Already confirmed another way', o(R.confirm_already), 'a caller or the IVR had confirmed it before the customer tapped'],
+      ['&nbsp;&nbsp;Not confirmed', o(R.confirm_not_confirmed), 'cancelled or still open (' + num(R.confirm_by_tap) + ' + ' + num(R.confirm_already) + ' + ' + num(R.confirm_not_confirmed) + ' = ' + num(R.confirm_by_tap + R.confirm_already + R.confirm_not_confirmed) + ')']]);
+    var t3 = table(['Confirmed on WhatsApp', 'Orders', 'How it is counted'], [
+      ['Confirmed by the Confirm tap', o(tap), 'from the table above'],
+      ['Confirmed after Change address', o(viaAddr), 'the customer tapped Change address, a caller fixed the address; counted once even if the order also tapped Confirm'],
+      ['<b>Confirmed on WhatsApp</b>', '<b>' + num(total) + '</b> <span style="color:var(--ds-muted);font-size:.85em">(' + ratio(total, n) + '%)</span>', num(tap) + ' + ' + num(viaAddr) + ' = ' + num(total) + ': the same number as "Confirmed so far" in the last row above']]);
+    return '<h3>Responses on WhatsApp</h3><div class="hm-sub">Every percentage is a share of the <b>' + num(n) + ' COD orders</b> placed on these dates. An order counts once, whichever message it answered.</div>' + t1 + '<div style="height:10px"></div>' + t2 + '<div style="height:10px"></div>' + t3;
   }
   function waReportHtml(W) {
     if (!W) return '';
