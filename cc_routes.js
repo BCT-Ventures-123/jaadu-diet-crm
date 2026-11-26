@@ -1568,7 +1568,7 @@ module.exports = function mountCcRoutes(app, deps) {
       const rows = await fetchCohortRows(r, null, null), ids = rows.map(o => o.id);
       const has = ids.length ? (await dbOne(`SELECT to_regclass('wa_messages') AS t`)).t : null;
       const LABEL = ['Message 1: sent at once', 'Message 2: 4 hours later', 'Message 3: 8 hours after the first', 'Message 4: the next morning', 'Message 5: the morning after'];
-      let steps = [], messaged = 0, confirmedByWa = 0, responses = null;
+      let steps = [], messaged = 0, confirmedByWa = 0, responses = null, respByStep = {}, answeredOfMessaged = {};
       if (has) {
         steps = await db(`SELECT m.step,
             COUNT(DISTINCT m.order_id) FILTER (WHERE m.sent_at IS NOT NULL)::int AS sent,
@@ -1600,10 +1600,19 @@ module.exports = function mountCcRoutes(app, deps) {
                 FROM wa_events e JOIN wa_messages m ON m.send_id = e.send_id JOIN orders_master o ON o.id = e.order_id
                 WHERE e.order_id = ANY($1) AND m.step <= 4 AND NOT m.is_test AND e.event IN ('clicked_confirm', 'clicked_cancel', 'clicked_change_address', 'replied_text')
                 GROUP BY e.order_id, o.confirmation_status) p`, [ids]);
+        // The same classification, message by message: an order is counted ONCE, on the message of its FIRST answer, in the first of Cancel / Change address / Confirm / only a message that applies. So the columns of the message table add up to the lines of the responses table.
+        const RESP = "('clicked_confirm', 'clicked_cancel', 'clicked_change_address', 'replied_text')";
+        respByStep = Object.fromEntries((await db(`SELECT first_step AS step, COUNT(*)::int AS new_resp, COUNT(*) FILTER (WHERE c)::int AS r_cancel, COUNT(*) FILTER (WHERE a AND NOT c)::int AS r_change, COUNT(*) FILTER (WHERE k AND NOT c AND NOT a)::int AS r_confirm, COUNT(*) FILTER (WHERE r AND NOT c AND NOT a AND NOT k)::int AS r_only
+            FROM (SELECT e.order_id, MIN(m.step) AS first_step, BOOL_OR(e.event = 'clicked_confirm') AS k, BOOL_OR(e.event = 'clicked_cancel') AS c, BOOL_OR(e.event = 'clicked_change_address') AS a, BOOL_OR(e.event = 'replied_text') AS r
+                  FROM wa_events e JOIN wa_messages m ON m.send_id = e.send_id WHERE e.order_id = ANY($1) AND m.step <= 4 AND NOT m.is_test AND e.event IN ${RESP} GROUP BY e.order_id) p GROUP BY first_step`, [ids])).map(x => [x.step, x]));
+        // Orders messaged at each step that have not answered ANY message yet.
+        answeredOfMessaged = Object.fromEntries((await db(`SELECT m.step, COUNT(DISTINCT m.order_id)::int AS n FROM wa_messages m WHERE m.order_id = ANY($1) AND m.step <= 4 AND NOT m.is_test AND m.sent_at IS NOT NULL
+            AND EXISTS (SELECT 1 FROM wa_events e JOIN wa_messages m2 ON m2.send_id = e.send_id WHERE e.order_id = m.order_id AND m2.step <= 4 AND NOT m2.is_test AND e.event IN ${RESP}) GROUP BY m.step`, [ids])).map(x => [x.step, x.n]));
       }
       let shipping = [], shipReplies = []; try { const nfy = require('./lib/waNotify'); shipping = await nfy.report(db, r.from, r.to); shipReplies = await nfy.replies(db, r.from, r.to); } catch (e) { console.error('[WA] shipping report failed:', e.message); }
       res.json({ from: r.from, to: r.to, orders: rows.length, orders_messaged: messaged, orders_messaged_pct: rows.length ? Math.round(messaged * 1000 / rows.length) / 10 : null, confirmed_by_whatsapp: confirmedByWa, responses, shipping, ship_replies: shipReplies,
-        bridge_has_data: steps.length > 0, steps: steps.map((s, i) => ({ ...s, confirmed_so_far: steps.slice(0, i + 1).reduce((a, x) => a + (x.confirmed_here || 0), 0), label: LABEL[s.step] || ('Message ' + (s.step + 1)), no_response: Math.max(0, s.sent - Math.max(s.confirm + s.cancel + s.change_address, s.replied)) })) });
+        bridge_has_data: steps.length > 0, steps: steps.map((s, i) => { const z = respByStep[s.step] || { new_resp: 0, r_cancel: 0, r_change: 0, r_confirm: 0, r_only: 0 }; return { ...s, ...z, confirmed_so_far: steps.slice(0, i + 1).reduce((a, x) => a + (x.confirmed_here || 0), 0), responded_so_far: steps.slice(0, i + 1).reduce((a, x) => a + ((respByStep[x.step] || {}).new_resp || 0), 0),
+          label: LABEL[s.step] || ('Message ' + (s.step + 1)), no_response: Math.max(0, s.sent - (answeredOfMessaged[s.step] || 0)) }; }) });
     } catch (err) { sendError(res, err); }
   });  app.get('/api/cc/lead-audit', async (req, res) => {
     try {
