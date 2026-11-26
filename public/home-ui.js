@@ -168,33 +168,20 @@
       days.map(function (x) { return [dayLabel(x.day), num(x.fresh.pool), cell(x.fresh.attempted_by_cut, x.fresh.attempted_by_cut_pct), cell(x.fresh.confirmed_by_cut, x.fresh.confirmed_by_cut_pct), num(x.old.pool), cell(x.old.reached, x.old.reached_pct), cell(x.old.confirmed_by_cut, x.old.confirmed_by_cut_pct)]; }));
     return h;
   }  // WhatsApp per message: how many orders each message reached and what the customers did. Counts orders, not messages.
-  // Responses (owner 2026-11-26). Every percentage is a share of all the COD orders. Three small tables, each adding up on its own:
-  //  1) who responded: each ORDER counted once (Cancel, else Change address, else Confirm, else reply only), so the lines add up to the total;  2) what the Confirm taps did;  3) how the WhatsApp confirmations add up.
+  // Responses (owner 2026-11-26): COD orders, how many ORDERS pressed Confirm, Change address, Cancel, and the total responses recorded. Nothing else. Every percentage is a share of all the COD orders.
   function respH(W) {
     var R = W.responses; if (!R || !W.orders) return '';
-    var n = W.orders, o = function (v) { return cell(v, ratio(v, n)); }, any = R.any_response, none = Math.max(0, n - any), tap = R.confirm_by_tap || 0, total = W.confirmed_by_whatsapp || 0, viaAddr = Math.max(0, total - tap);
-    var t1 = table(['Who answered (each order counted once)', 'Orders', 'How it is counted'], [
-      ['<b>COD orders</b>', '<b>' + num(n) + '</b> (100%)', 'the base of every percentage here'],
-      ['<b>Responded in any way</b>', '<b>' + num(any) + '</b> <span style="color:var(--ds-muted);font-size:.85em">(' + ratio(any, n) + '%)</span>', 'the four lines below add up to this: ' + num(R.cat_cancel) + ' + ' + num(R.cat_change) + ' + ' + num(R.cat_confirm) + ' + ' + num(R.cat_reply_only) + ' = ' + num(R.cat_cancel + R.cat_change + R.cat_confirm + R.cat_reply_only)],
-      ['&nbsp;&nbsp;Tapped Cancel', o(R.cat_cancel), num(R.cancel_now_cancelled) + ' are cancelled now; the others were called back by a caller'],
-      ['&nbsp;&nbsp;Tapped Change address', o(R.cat_change), 'counted here if the order did not tap Cancel; ' + num(R.change_now_confirmed) + ' of the ' + num(R.change_tap) + ' who tapped it are confirmed now (a caller fixed the address)'],
-      ['&nbsp;&nbsp;Tapped Confirm', o(R.cat_confirm), 'counted here if the order did not tap Cancel or Change address'],
-      ['&nbsp;&nbsp;Only wrote a message', o(R.cat_reply_only), 'free text, nothing tapped; a caller follows up (' + num(R.replied) + ' orders wrote a message in all)'],
-      ['<b>No response yet</b>', '<b>' + num(none) + '</b> <span style="color:var(--ds-muted);font-size:.85em">(' + ratio(none, n) + '%)</span>', num(any) + ' + ' + num(none) + ' = ' + num(any + none) + ' COD orders']]);
-    var t2 = table(['What the Confirm taps did', 'Orders', 'How it is counted'], [
-      ['<b>Orders that tapped Confirm</b>', '<b>' + num(R.confirm_tap) + '</b> <span style="color:var(--ds-muted);font-size:.85em">(' + ratio(R.confirm_tap, n) + '%)</span>', 'an order that also tapped something else is in this line too, so it can be more than the Confirm line above'],
-      ['&nbsp;&nbsp;The tap confirmed the order', o(R.confirm_by_tap), 'the order was waiting and the tap confirmed it'],
-      ['&nbsp;&nbsp;Already confirmed another way', o(R.confirm_already), 'a caller or the IVR had confirmed it before the customer tapped'],
-      ['&nbsp;&nbsp;Not confirmed', o(R.confirm_not_confirmed), 'cancelled or still open (' + num(R.confirm_by_tap) + ' + ' + num(R.confirm_already) + ' + ' + num(R.confirm_not_confirmed) + ' = ' + num(R.confirm_by_tap + R.confirm_already + R.confirm_not_confirmed) + ')']]);
-    var t3 = table(['Confirmed on WhatsApp', 'Orders', 'How it is counted'], [
-      ['Confirmed by the Confirm tap', o(tap), 'from the table above'],
-      ['Confirmed after Change address', o(viaAddr), 'the customer tapped Change address, a caller fixed the address; counted once even if the order also tapped Confirm'],
-      ['<b>Confirmed on WhatsApp</b>', '<b>' + num(total) + '</b> <span style="color:var(--ds-muted);font-size:.85em">(' + ratio(total, n) + '%)</span>', num(tap) + ' + ' + num(viaAddr) + ' = ' + num(total) + ': the same number as "Confirmed so far" in the last row above']]);
-    return '<h3>Responses on WhatsApp</h3><div class="hm-sub">Every percentage is a share of the <b>' + num(n) + ' COD orders</b> placed on these dates. An order counts once, whichever message it answered.</div>' + t1 + '<div style="height:10px"></div>' + t2 + '<div style="height:10px"></div>' + t3;
+    var n = W.orders, o = function (v) { return cell(v, ratio(v, n)); }, total = (R.cat_confirm || 0) + (R.cat_change || 0) + (R.cat_cancel || 0);
+    return '<h3>Responses on WhatsApp</h3>' + table(['', 'Orders'], [
+      ['<b>COD orders</b>', '<b>' + num(n) + '</b> (100%)'],
+      ['Pressed Confirm', o(R.cat_confirm)],
+      ['Pressed Change address', o(R.cat_change)],
+      ['Pressed Cancel', o(R.cat_cancel)],
+      ['<b>Total responses</b>', '<b>' + num(total) + '</b> <span style="color:var(--ds-muted);font-size:.85em">(' + ratio(total, n) + '%)</span>']]) + '<div class="hm-sub">An order that pressed more than one button is counted once (Cancel, else Change address, else Confirm), so the lines add up.</div>';
   }
   function waReportHtml(W) {
     if (!W) return '';
-    var h = '<h3>WhatsApp messages, one by one</h3><div class="hm-sub">Orders placed on these dates: <b>' + num(W.orders) + '</b>. Got at least one WhatsApp message: <b>' + num(W.orders_messaged) + '</b> (' + pc(W.orders_messaged_pct) + '). Confirmed on WhatsApp (Confirm tap + Change address, then confirmed): <b>' + num(W.confirmed_by_whatsapp) + '</b>. Each row counts orders. The 2nd message goes 4 hours after the 1st, the 3rd 4 hours after the 2nd.</div>';
+    var h = '<h3>WhatsApp messages, one by one</h3><div class="hm-sub">Orders placed on these dates: <b>' + num(W.orders) + '</b>. Got at least one WhatsApp message: <b>' + num(W.orders_messaged) + '</b> (' + pc(W.orders_messaged_pct) + '). Pressed Confirm or Change address: <b>' + num(W.responses ? (W.responses.cat_confirm || 0) + (W.responses.cat_change || 0) : W.confirmed_by_whatsapp) + '</b>. Each row counts orders. The 2nd message goes 4 hours after the 1st, the 3rd 4 hours after the 2nd.</div>';
     // Prepaid, out-for-delivery and delivery-failed messages, one row per message name (messages created on these dates).
     var ship = (W.shipping || []).filter(function (x) { return x.sent || x.failed; });
     var shipH = ship.length ? '<h3>Shipping messages, one by one</h3><div class="hm-sub">Prepaid confirmation, out for delivery and delivery failed. Each row counts messages created on these dates. Replies: tapped = customer used a button.</div>' + table(['Message', 'Sent', 'Delivered', 'Read', 'Failed', 'Replied (tapped)'],
@@ -204,10 +191,10 @@
       rep.map(function (x) { return [esc(x.order_name || ''), esc(x.label || ''), esc(new Date(x.at).toLocaleString('en-IN', { timeZone: TZ, day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }))]; }));
     if (!W.bridge_has_data) return h + '<div class="hm-flag warn">No WhatsApp messages are recorded for these dates yet. The WhatsApp bridge records every message sent; this table fills as soon as it is live.</div>' + shipH;
     // Owner 2026-11-26: the base of every rate is ALL the COD orders placed on these dates (W.orders), never the number of messages sent. Delivered and Read are delivery rates of the messages themselves.
-    var all = W.orders, of = function (n) { return cell(n, ratio(n, all)); };
-    // Same classification as the Responses tables below: an order is counted ONCE, on the message of its FIRST answer, as Cancel, else Change address, else Confirm, else only a message. So each column adds up to its line below, and Responded so far ends at Responded in any way.
-    return h + '<div class="hm-sub">Delivered and Read are shares of the orders messaged at that step. <b>Every other percentage is a share of all ' + num(all) + ' COD orders.</b> An order that answers is counted <b>once</b>, on the message of its first answer, as Cancel, else Change address, else Confirm, else only a message. So <b>Cancel + Change address + Confirm + Only a message</b> add up to the answers of that row, <b>Responded so far</b> is the running total, and its last row equals "Responded in any way" below. <b>Confirmed so far</b> counts orders that were confirmed on WhatsApp (Confirm tap, or Change address then confirmed); its last row equals "Confirmed on WhatsApp" below.</div>' + table(['', 'Orders messaged', 'Delivered', 'Read', 'Tapped Cancel', 'Tapped Change address', 'Tapped Confirm', 'Only a message', 'Responded so far', 'Confirmed on WhatsApp on this message', 'Confirmed so far', 'No response yet'],
-      W.steps.map(function (s) { return [esc(s.label), num(s.sent), cell(s.delivered, ratio(s.delivered, s.sent)), cell(s.read, ratio(s.read, s.sent)), of(s.r_cancel), of(s.r_change), of(s.r_confirm), of(s.r_only), of(s.responded_so_far), of(s.confirmed_here), of(s.confirmed_so_far), num(s.no_response)]; })) + respH(W) + shipH;
+    var all = W.orders, of = function (n) { return cell(n, ratio(n, all)); }, run = { c: 0, a: 0, k: 0 };
+    // Owner 2026-11-26: only button presses, as plain counts of ORDERS (an order that pressed more than one button is counted once: Cancel, else Change address, else Confirm). Every percentage is of all COD orders, except Delivered and Read.
+    return h + '<div class="hm-sub">Delivered and Read are shares of the orders messaged at that step. Every other percentage is a share of all <b>' + num(all) + ' COD orders</b>. Confirmed so far = Confirm + Change address.</div>' + table(['', 'Orders messaged', 'Delivered', 'Read', 'Tapped Confirm', 'Tapped Change address', 'Confirmed so far (Confirm + Change address)', 'Tapped Cancel', 'Responses on this message', 'Responses so far'],
+      W.steps.map(function (s) { var here = (s.r_confirm || 0) + (s.r_change || 0) + (s.r_cancel || 0); run.k += s.r_confirm || 0; run.a += s.r_change || 0; run.c += s.r_cancel || 0; return [esc(s.label), num(s.sent), cell(s.delivered, ratio(s.delivered, s.sent)), cell(s.read, ratio(s.read, s.sent)), of(s.r_confirm), of(s.r_change), of(run.k + run.a), of(s.r_cancel), of(here), of(run.k + run.a + run.c)]; })) + respH(W) + shipH;
   }  // ===== THE LEDGER PAGES (lib/ledger.js): every number below is added up from one list of orders, so the pages agree =====
   var CHN = [['aman', 'Aman'], ['cc', 'Call centre'], ['ivr', 'IVR'], ['wa', 'WhatsApp']];
   function asOf(L) { return new Date(L.as_of).toLocaleString('en-IN', { timeZone: TZ, day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); }
