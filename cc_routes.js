@@ -1281,6 +1281,15 @@ module.exports = function mountCcRoutes(app, deps) {
         const led = require('./lib/ledger').buildLedger(rows, touches, now);
         connectedAt = require('./lib/codReport').connectedAtOf(touches);       // the same "customer answered on any channel" rule for the Overview and the by-day tables below
         codAll = require('./lib/codReport').build(led, await fetchPrepaidByDay(r, team, null), { today: todayIst() });
+        // Per order, per channel: did the customer respond on that channel at any time (a key pressed, a tap or reply, an answered call)? One order counts once per channel, even if another channel reached it first. Same COD orders as the ledger (owner 2026-11-27: the IVR and WhatsApp tables).
+        const zc = () => ({ orders: 0, aman: 0, cc: 0, ivr: 0, wa: 0 }), chAny = { total: zc(), by_day: {} };
+        for (const o of led) {
+          const hit = { aman: false, cc: false, ivr: false, wa: false };
+          for (const x of (touches.get(o.id) || [])) if (x.connected && hit[x.team] !== undefined) hit[x.team] = true;
+          const d = chAny.by_day[o.day] || (chAny.by_day[o.day] = zc());
+          for (const t of [chAny.total, d]) { t.orders++; for (const k of Object.keys(hit)) if (hit[k]) t[k]++; }
+        }
+        if (codAll) codAll.channel_any = chAny;
       } catch (e) { console.error('[Report] COD end-to-end block skipped:', e.message); }
       const openRows = backlogRows.filter(o => new Date(o.order_at) >= sinceOf(o.team));
       const pipeline = funnelLib.buildPipeline(openRows, now);
