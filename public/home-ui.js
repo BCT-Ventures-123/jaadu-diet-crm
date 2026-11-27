@@ -290,13 +290,22 @@
         ['Cancelled by ' + who, num(own.cancelled), p(own.cancelled), b(own.cancelled, 'bad'), esc('the decision was made on ' + who + '\'s call')]]);
     return '<h3>' + (key === 'aman' ? 'Aman' : 'Call centre') + ': ' + num(n) + ' leads</h3><div class="hm-sub">Only the leads given to ' + who + '. A lead that ' + who + ' could not reach and another channel confirmed counts for that channel. Add the Aman and Call centre pages and you get the Overall page.</div>' + table(['', 'Leads', '% of leads', 'Share', 'What it means'], rows, ['l', 'r', 'r', 'r', 'm']);
   }
+  // Day | Orders | Responded | %  for the IVR or WhatsApp (owner 2026-11-27). The base is the day's COD orders; an order counts once, as responded when the customer pressed a key (IVR) or tapped or replied (WhatsApp) on ANY attempt, even if another channel reached it first.
+  function respondedHtml(L, key) {
+    var D = L && L.responded_by_day; if (!D) return '';
+    var days = Object.keys(D).sort(), tot = 0, got = 0, nm = key === 'ivr' ? 'IVR' : 'WhatsApp';
+    var rows = days.map(function (d) { var x = D[d]; tot += x.orders; got += x[key]; return [dayLabel(d), num(x.orders), num(x[key]), pc(ratio(x[key], x.orders))]; });
+    if (days.length > 1) rows.push(['<b>All these days</b>', '<b>' + num(tot) + '</b>', '<b>' + num(got) + '</b>', '<b>' + pc(ratio(got, tot)) + '</b>']);
+    return '<h3>' + nm + ': share of COD orders that responded</h3><div class="hm-sub">Orders are the COD orders placed that day. Responded: the customer ' + (key === 'ivr' ? 'pressed a key on any IVR call' : 'tapped a button or replied on WhatsApp') + '. Each order counts once, even if another channel reached it first, so the channels overlap and do not add up to the Overall page.</div>' + table(['Day', 'Orders', 'Responded', '%'], rows, ['l', 'r', 'r', 'r']);
+  }
   // The IVR or WhatsApp page: the leads that channel reached or last tried, and the decisions it made, split by whose lead it was.
   function channelLedgerHtml(L, key) {
     if (!L) return '<div class="hm-sub">The order ledger is not ready on the server yet. Refresh in a minute.</div>';
+    var respHtml = respondedHtml(L, key);
     var S2 = L.summary, T = S2.total, nm = key === 'ivr' ? 'the IVR' : 'WhatsApp', n = T.leads, A = S2.teams.aman, C = S2.teams.cc;
     var split = function (f) { return 'Aman\'s leads ' + num(f(A)) + ', call centre\'s ' + num(f(C)) + (S2.teams.other.leads ? ', neither ' + num(f(S2.teams.other)) : ''); };
     var row = function (label, f, note, tone) { return [label, num(f(T)), pc(ratio(f(T), n)), bar(ratio(f(T), n), tone), esc(note + ' (' + split(f) + ')')]; };
-    return '<h3>' + (key === 'ivr' ? 'IVR' : 'WhatsApp') + ' on the ' + num(n) + ' COD orders</h3><div class="hm-sub">Each order is counted once. An order is ' + nm + '\'s only if ' + nm + ' reached the customer first, or tried last when nobody answered. Add Aman, Call centre, IVR and WhatsApp and you get the Overall page.</div>' + table(['', 'Orders', '% of COD', 'Share', 'Whose leads'], [
+    return respHtml + '<h3>' + (key === 'ivr' ? 'IVR' : 'WhatsApp') + ' on the ' + num(n) + ' COD orders</h3><div class="hm-sub">Each order is counted once. An order is ' + nm + '\'s only if ' + nm + ' reached the customer first, or tried last when nobody answered. Add Aman, Call centre, IVR and WhatsApp and you get the Overall page.</div>' + table(['', 'Orders', '% of COD', 'Share', 'Whose leads'], [
       row('Reached by ' + nm, function (b) { return b.reached[key]; }, 'the customer ' + (key === 'ivr' ? 'pressed a key' : 'replied')),
       row('Tried last, nobody answered', function (b) { return b.tried_by[key]; }, 'no key pressed or no reply yet', 'warn'),
       row('Confirmed by ' + nm, function (b) { return b.confirmed_by[key]; }, 'the confirm decision came from ' + nm),
