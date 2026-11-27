@@ -23,6 +23,12 @@ test('classify: missed words, answered words, and the seconds when the word is u
   assert.equal(ip.normalize(rec({ call_status: 'no_answer', call_duration: 0, dtmf_input: '' })).outcome, 'missed');
 });
 
+test('normalize: the provider\'s real log shape (client_no, customer_attended, recordid, ISO time with +05:30)', () => {
+  const real = { dialer_id: '678', client_no: '9876543458', customer_attended: '1', call_time: '2026-11-27T14:11:04+05:30', call_duration: '25', recordid: '3820327', note: null };
+  const n = ip.normalize(real); assert.equal(n.id, '3820327'); assert.equal(n.phone, '9876543458'); assert.equal(n.outcome, 'answered'); assert.equal(n.at.toISOString(), '2026-11-27T08:41:04.000Z'); assert.equal(n.dialer, 'dialer 678');
+  assert.equal(ip.normalize({ ...real, customer_attended: '0', call_duration: '0' }).outcome, 'missed'); assert.equal(ip.normalize({ ...real, customer_attended: '0', call_duration: '30' }).outcome, 'missed');
+});
+
 const ours = [{ id: 1, phone: '09876543210', placed_at: '2026-11-27T03:23:50Z' }, { id: 2, phone: '9876543210', placed_at: '2026-11-27T03:00:00Z' }, { id: 3, phone: '9000000001', placed_at: '2026-11-27T03:24:00Z' }];
 test('matchOne: same phone, nearest in time, within the window, one provider call per call of ours', () => {
   const p = ip.normalize(rec());                                                                  // call started 08:54:30 India = 03:24:30Z
