@@ -680,6 +680,18 @@ async function ivrTick() {
 }
 cron.schedule('* * * * *', ivrTick);
 
+// Every 5 minutes: read the IVR provider's own call log (only when IVR_PROVIDER_SYNC=on) and match it to our calls. Read-only towards the provider; a failure here never touches orders or calls.
+let ivrProviderBusy = false;
+async function ivrProviderTick() {
+  if (ivrProviderBusy) return;
+  ivrProviderBusy = true;
+  try {
+    const r = await require('./lib/ivrProvider').sync(db);
+    if (r && (r.stored || r.error)) console.log('[IVR provider]', JSON.stringify(r));
+  } catch (err) { console.error('[IVR provider] Error:', err.message); } finally { ivrProviderBusy = false; }
+}
+cron.schedule('*/5 * * * *', ivrProviderTick);
+
 // Every 5 minutes: copy this month's results (Aman, call centre, IVR, WhatsApp) into the "Updated Caller sheet" as a backup + Report. Read-only on the database; a failure here never touches orders or calls.
 let backupBusy = false;
 async function sheetBackupTick() {

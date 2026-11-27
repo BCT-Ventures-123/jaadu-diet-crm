@@ -1790,6 +1790,20 @@ module.exports = function mountCcRoutes(app, deps) {
       res.json({ setup: ivrDb.setup(), presses: await ivrDb.recentKeypresses(db, 10), forward_set: !!process.env.IVR_FORWARD_URL, recent: rows.map(r => ({ id: r.id, phone: ivrDb.mask(r.phone), order_name: r.order_name || null, kind: r.kind || null, attempt: r.attempt, is_test: r.is_test, status: r.status, key: r.dtmf, result: r.result, applied: r.applied, note: r.note, placed_at: r.placed_at, result_at: r.result_at })) });
     } catch (err) { sendError(res, err); }
   });
+  // The provider's own record of our calls (lib/ivrProvider.js). Sample = read-only look at the first records of the provider's call log, phone numbers masked, to check the real field names. Check = our calls of the dates against theirs.
+  app.get('/api/cc/ivr/provider-sample', async (req, res) => {
+    try {
+      ivrAdmin(req); const ip = require('./lib/ivrProvider'), r = await ip.fetchPage({ apiKey: ip.settings().apiKey, cursors: { dialer: '0' } });
+      const mask = (v) => JSON.parse(JSON.stringify(v).replace(/\d{10,12}/g, x => '*'.repeat(x.length - 3) + x.slice(-3)));
+      res.json({ ok: r.ok, message: r.message || null, sync_on: ip.settings().on, key_set: !!ip.settings().apiKey, field_names: r.keys || [], records_in_page: r.total_raw, read_ok: (r.records || []).length, next_cursor: r.next, has_more: r.more, sample: mask(r.raw || []), normalized_sample: mask((r.records || []).slice(0, 3)) });
+    } catch (err) { sendError(res, err); }
+  });
+  app.get('/api/cc/ivr/provider-check', async (req, res) => {
+    try {
+      if (!['admin', 'aman'].includes(req.agent.role)) throw new HttpError(403, 'Not allowed for your account');
+      const r = parseRange(req.query); res.json(await require('./lib/ivrProvider').check(db, r.from, r.to));
+    } catch (err) { sendError(res, err); }
+  });
   // Emergency stop and restart of all real IVR calls (test calls are not affected).
   app.post('/api/cc/ivr/pause', async (req, res) => {
     try { ivrAdmin(req); res.json({ paused: await require('./lib/ivrDb').setPaused(db, !!(req.body || {}).paused) }); } catch (err) { sendError(res, err); }
