@@ -401,6 +401,18 @@
     h += Ld ? ledgerDays(Ld.days[key], 'Day by day: ' + (key === 'aman' ? 'Aman\'s' : 'the call centre\'s') + ' leads') : funnelDays(F);
     return h;
   }
+  // The IVR provider's own record of our calls (lib/ivrProvider.js), next to ours: so "no key pressed" is split into answered without a key, missed, and not found at the provider.
+  function provHtml(P) {
+    if (!P) return '';
+    if (!P.provider_last_fetch_at) return '<div class="hm-sub">The IVR provider\'s own call log is not connected yet, so "no key pressed" cannot be split into missed and answered.</div>';
+    var when = new Date(P.provider_last_fetch_at).toLocaleTimeString('en-IN', { timeZone: TZ, hour: '2-digit', minute: '2-digit' });
+    return '<h3>Our IVR calls against the provider\'s own log</h3><div class="hm-sub">What the CRM asked the provider to dial, and what the provider\'s log says happened to each call. Read from the provider every 5 minutes, last at ' + esc(when) + '.</div>' + table(['', 'Calls', 'What it means'], [
+      ['Calls the CRM placed', num(P.our_calls_placed), 'the provider accepted the request'],
+      ['Found in the provider\'s log', num(P.found_at_provider), pc(ratio(P.found_at_provider, P.our_calls_placed)) + ' of our calls'],
+      ['Customer answered', num(P.answered), num(P.answered_and_pressed_a_key) + ' pressed a key, ' + num(P.answered_no_key) + ' answered and pressed nothing'],
+      ['Customer missed', num(P.missed), 'rang, nobody picked up (or busy, switched off)'],
+      ['Not found in the provider\'s log', num(P.not_found_at_provider), P.not_found_at_provider ? 'placed by the CRM but the provider has no record yet: these may never have been dialled' : 'every call we placed is in the provider\'s log']]);
+  }
   function viewIvr() {
     var C = S.team.channels, row = C.channels.filter(function (x) { return x.key === 'ivr'; })[0] || { confirmed: 0, confirmed_pct_of_cod: null, share_of_confirmed_pct: null };
     var I = S.ivr, L = S.live, h = '';
@@ -413,6 +425,7 @@
       var KEYW = { confirmed: 'Confirmed (1)', address_change: 'Address change (2)', cancel_requested: 'Cancel asked (3)', unknown: 'Other key' };
       h += '<h3>Live: latest IVR calls <span class="hm-sub" style="font-weight:400">updates every 30 seconds' + (S.liveAt ? ' · last at ' + esc(S.liveAt.toLocaleTimeString('en-IN', { timeZone: TZ, hour: '2-digit', minute: '2-digit', second: '2-digit' })) : '') + '</span></h3>' + table(['When', 'Order', 'Number', 'Status', 'Key pressed'], S.recent.slice(0, 25).map(function (r) { var stx = r.status === 'skipped' ? 'Left to a person' : (r.status === 'failed' || r.status === 'failed_system') ? 'Request failed' : r.result ? '<b>Answered</b>' : r.status === 'placed' ? ((Date.now() - new Date(r.placed_at).getTime()) / 60000 <= 15 ? 'Calling… waiting for a key' : 'No key pressed') : esc(r.status); return [esc(new Date(r.placed_at).toLocaleString('en-IN', { timeZone: TZ, day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })), esc((r.is_test ? 'Test ' : '') + (r.order_name || '')), esc(r.phone), stx, esc(r.result ? (KEYW[r.result] || r.result) : '')]; }));
     }
+    h += provHtml(S.prov);
     if (S.team && S.team.funnel && S.team.funnel.ivr) h += S.ledger ? channelLedgerHtml(S.ledger, 'ivr') + funnelBlock(S.team.funnel.ivr, '', 'ivr', '', true) : funnelBlock(S.team.funnel.ivr, 'all COD tea orders on the chosen dates', 'ivr');
     if (!I) return h + '<div class="hm-err">IVR numbers are not available right now. The rest of Home still works.</div>';
     var t = I.totals;
@@ -478,15 +491,15 @@
   function load() {
     $('hm-root').innerHTML = '<div class="hm-load">Loading…</div>';
     var q = '?from=' + S.from + '&to=' + S.to;
-    Promise.all([getJson('/api/cc/hour-curve').catch(function (e) { if (e.message === 'login') throw e; return null; }), getJson('/api/cc/team-report' + q), getJson('/api/cc/ivr-report' + q).catch(function (e) { if (e.message === 'login') throw e; return null; }), getJson('/api/cc/ivr-plan').catch(function (e) { if (e.message === 'login') throw e; return null; }), getJson('/api/cc/ivr/status').catch(function () { return null; }), getJson('/api/cc/lead-audit' + q).catch(function (e) { if (e.message === 'login') throw e; return null; }), getJson('/api/cc/two-pm?date=' + S.to).catch(function (e) { if (e.message === 'login') throw e; return null; }), getJson('/api/cc/wa-report' + q).catch(function (e) { if (e.message === 'login') throw e; return null; }), getJson('/api/cc/ledger' + q).catch(function (e) { if (e.message === 'login') throw e; return null; }), getJson('/api/cc/shopify-check').catch(function (e) { if (e.message === 'login') throw e; return null; }), getJson('/api/cc/cancel-requests').catch(function (e) { if (e.message === 'login') throw e; return null; })])
-      .then(function (r) { getJson('/api/cc/road-to-95').then(function (j) { S.road = j; render(); }).catch(function () {}); if (!S.pipeAsked) { S.pipeAsked = true; getJson('/api/cc/pipeline-check').then(function (j) { S.pipe = j; render(); }).catch(function () {}); } S.curve = r[0]; S.team = r[1]; S.ivr = r[2]; S.live = r[3]; S.recent = r[4] ? r[4].recent : null; S.audit = r[5]; S.twoPm = r[6]; S.wa = r[7]; S.ledger = r[8]; S.shop = r[9]; S.cancelAsks = r[10]; S.liveAt = new Date(); render(); })
+    Promise.all([getJson('/api/cc/hour-curve').catch(function (e) { if (e.message === 'login') throw e; return null; }), getJson('/api/cc/team-report' + q), getJson('/api/cc/ivr-report' + q).catch(function (e) { if (e.message === 'login') throw e; return null; }), getJson('/api/cc/ivr-plan').catch(function (e) { if (e.message === 'login') throw e; return null; }), getJson('/api/cc/ivr/status').catch(function () { return null; }), getJson('/api/cc/lead-audit' + q).catch(function (e) { if (e.message === 'login') throw e; return null; }), getJson('/api/cc/two-pm?date=' + S.to).catch(function (e) { if (e.message === 'login') throw e; return null; }), getJson('/api/cc/wa-report' + q).catch(function (e) { if (e.message === 'login') throw e; return null; }), getJson('/api/cc/ledger' + q).catch(function (e) { if (e.message === 'login') throw e; return null; }), getJson('/api/cc/shopify-check').catch(function (e) { if (e.message === 'login') throw e; return null; }), getJson('/api/cc/cancel-requests').catch(function (e) { if (e.message === 'login') throw e; return null; }), getJson('/api/cc/ivr/provider-check' + q).catch(function (e) { if (e.message === 'login') throw e; return null; })])
+      .then(function (r) { getJson('/api/cc/road-to-95').then(function (j) { S.road = j; render(); }).catch(function () {}); if (!S.pipeAsked) { S.pipeAsked = true; getJson('/api/cc/pipeline-check').then(function (j) { S.pipe = j; render(); }).catch(function () {}); } S.curve = r[0]; S.team = r[1]; S.ivr = r[2]; S.live = r[3]; S.recent = r[4] ? r[4].recent : null; S.audit = r[5]; S.twoPm = r[6]; S.wa = r[7]; S.ledger = r[8]; S.shop = r[9]; S.cancelAsks = r[10]; S.prov = r[11]; S.liveAt = new Date(); render(); })
       .catch(function (e) { if (e.message !== 'login') $('hm-root').innerHTML = '<div class="hm-err">' + esc(e.message) + '</div>'; });
   }
 
   // Live: while the IVR view is open the numbers and the latest calls refresh by themselves every 30 seconds.
   function refreshLive() {
-    Promise.all([getJson('/api/cc/ivr-plan').catch(function () { return null; }), getJson('/api/cc/ivr-report?from=' + S.from + '&to=' + S.to).catch(function () { return null; }), getJson('/api/cc/ivr/status').catch(function () { return null; })])
-      .then(function (r) { if (r[0]) S.live = r[0]; if (r[1]) S.ivr = r[1]; if (r[2]) S.recent = r[2].recent; S.liveAt = new Date(); if (S.view === 'ivr' && pane.classList.contains('active') && S.team) render(); });
+    Promise.all([getJson('/api/cc/ivr-plan').catch(function () { return null; }), getJson('/api/cc/ivr-report?from=' + S.from + '&to=' + S.to).catch(function () { return null; }), getJson('/api/cc/ivr/status').catch(function () { return null; }), getJson('/api/cc/ivr/provider-check?from=' + S.from + '&to=' + S.to).catch(function () { return null; })])
+      .then(function (r) { if (r[0]) S.live = r[0]; if (r[1]) S.ivr = r[1]; if (r[2]) S.recent = r[2].recent; if (r[3]) S.prov = r[3]; S.liveAt = new Date(); if (S.view === 'ivr' && pane.classList.contains('active') && S.team) render(); });
   }
   setInterval(function () { if (!document.hidden && pane.classList.contains('active') && S.view === 'ivr') refreshLive(); }, 30000);
 
