@@ -1356,6 +1356,14 @@ module.exports = function mountCcRoutes(app, deps) {
             if (!touches.get(h.order_id) || !touches.get(h.order_id).some(x => x.team === 'ivr' && x.hist)) addTouch(h.order_id, { t: new Date(h.t), team: 'ivr', connected: h.event_type !== 'rnr', hist: true });
           }
         });
+        // Owner rule 2026-11-27: a customer who TAPPED a button or REPLIED on WhatsApp is connected, whether or not the tap changed the order (a Cancel tap that only sets a follow-up, a Confirm tap after a call already confirmed it).
+        // Same events and same messages as the WhatsApp report (steps 0 to 4, no test messages), so both pages count the same orders.
+        if (waMsgs.size) {
+          try {
+            (await db(`SELECT DISTINCT m.order_id FROM wa_events e JOIN wa_messages m ON m.send_id = e.send_id
+                       WHERE m.order_id = ANY($1) AND m.step <= 4 AND NOT m.is_test AND e.event IN ('clicked_confirm', 'clicked_cancel', 'clicked_change_address', 'replied_text')`, [ids])).forEach(x => waReplied.add(x.order_id));
+          } catch (e) { console.error('[Report] WhatsApp taps not read, only status changes count as WhatsApp answers:', e.message); }
+        }
         waMsgs.forEach((list, id) => { if (waReplied.has(id)) list[list.length - 1].connected = true; list.forEach(x => addTouch(id, x)); });
       }
     } catch (e) { console.error('[Report] could not read the WhatsApp and IVR history, the funnel counts calls only:', e.message); }
