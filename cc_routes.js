@@ -1578,6 +1578,27 @@ module.exports = function mountCcRoutes(app, deps) {
     } catch (err) { sendError(res, err); }
   });  // ===================== WHATSAPP REPORT: per message (1st at once, 2nd after 4 hours, 3rd after 8 hours): messaged, delivered, read, confirm / cancel / change address / reply =====================
   // Orders placed in the chosen dates (the same real COD tea orders as the Home report). Counts ORDERS, not messages. Empty until the WhatsApp bridge is live (it records every message).
+  // How fast do customers answer the first WhatsApp message? For the IVR wait decision (owner 2026-11-27). Read-only. Per COD order: minutes from the first message to the first tap or reply (any message step), by the hour the message went out.
+  app.get('/api/cc/wa-latency', async (req, res) => {
+    try {
+      if (!['admin', 'aman'].includes(req.agent.role)) throw new HttpError(403, 'Not allowed for your account');
+      const r = parseRange(req.query);
+      const ids = (await fetchCohortRows(r, null, null)).map(o => o.id);
+      if (!ids.length || !(await dbOne(`SELECT to_regclass('wa_messages') AS t`)).t) return res.json({ from: r.from, to: r.to, groups: {} });
+      const rows = await db(`WITH fm AS (SELECT order_id, MIN(sent_at) AS s FROM wa_messages WHERE order_id = ANY($1) AND step = 0 AND NOT is_test AND sent_at IS NOT NULL GROUP BY order_id),
+                                  fr AS (SELECT e.order_id, MIN(COALESCE(e.at, e.received_at)) AS r FROM wa_events e JOIN wa_messages m ON m.send_id = e.send_id
+                                         WHERE e.order_id = ANY($1) AND m.step <= 4 AND NOT m.is_test AND e.event IN ('clicked_confirm', 'clicked_cancel', 'clicked_change_address', 'replied_text') GROUP BY e.order_id)
+                             SELECT EXTRACT(HOUR FROM fm.s AT TIME ZONE 'Asia/Kolkata')::int AS hr, CASE WHEN fr.r IS NULL THEN NULL ELSE GREATEST(0, EXTRACT(EPOCH FROM (fr.r - fm.s)) / 60) END AS mins
+                             FROM fm LEFT JOIN fr ON fr.order_id = fm.order_id`, [ids]);
+      const CUT = [2, 5, 10, 15, 30, 60, 120, 240], pctl = (a, p) => (a.length ? Math.round(a[Math.min(a.length - 1, Math.floor(p * a.length))] * 10) / 10 : null);
+      const grp = (list) => { const resp = list.filter(x => x.mins !== null).map(x => Number(x.mins)).sort((a, b) => a - b), n = list.length;
+        return { orders_messaged: n, responded: resp.length, responded_pct: n ? Math.round(resp.length * 1000 / n) / 10 : null,
+          within_min: Object.fromEntries(CUT.map(c => [c, n ? Math.round(resp.filter(m => m <= c).length * 1000 / n) / 10 : null])),   // % of ALL messaged orders that answered within c minutes
+          median_min: pctl(resp, 0.5), p75_min: pctl(resp, 0.75), p90_min: pctl(resp, 0.9) }; };
+      const inH = (a, b) => (x) => (a < b ? x.hr >= a && x.hr < b : x.hr >= a || x.hr < b);
+      res.json({ from: r.from, to: r.to, groups: { all: grp(rows), morning_7_9: grp(rows.filter(inH(7, 9))), day_9_18: grp(rows.filter(inH(9, 18))), evening_18_22: grp(rows.filter(inH(18, 22))), night_22_7: grp(rows.filter(inH(22, 7))) } });
+    } catch (err) { sendError(res, err); }
+  });
   app.get('/api/cc/wa-report', async (req, res) => {
     try {
       if (!['admin', 'aman'].includes(req.agent.role)) throw new HttpError(403, 'Not allowed for your account');
