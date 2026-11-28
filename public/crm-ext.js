@@ -605,6 +605,23 @@
       if (d.mode === 'on' && d.in_shift && other.active === 0 && other.total) h.push('<div class="warn km-meta">' + (isAman ? 'Call centre' : 'Aman') + ' is not logged in: you cover their leads</div>');
       h.push('<span class="tag">Autopilot ' + (d.mode === 'on' ? 'on' : d.mode === 'dry' ? 'planning only' : 'off') + '</span>');
       el.innerHTML = h.join('');
+      if (d.people) apLeave(el);      // only Aman and the admin get the team-on-leave control (the call centre agents' answer has no people list)
+    }).catch(function () {});
+  }
+  // Team on leave: if the call centre or Aman is not working today, every new lead goes to the other team. Default week: Saturday the call centre is off, Sunday Aman is off.
+  function apLeave(el) {
+    fetch('/api/cc/team-leave').then(function (r) { return r.ok ? r.json() : null; }).then(function (L) {
+      if (!L || !L.enabled) return;
+      var other = L.off === 'cc' ? 'Aman' : 'the call centre', box = document.createElement('div'); box.className = 'km-meta'; box.id = 'leaveBox'; box.style.cssText = 'margin-top:6px';
+      box.innerHTML = '<b>Not working today:</b> ' + (L.off === 'none' ? 'nobody' : esc(L.name) + ' (' + (L.source === 'chosen' ? 'set by hand' : 'weekly default') + ')') +
+        ' &nbsp;<select id="leaveSel"><option value="default">Use the weekly default</option><option value="none">Nobody is off</option><option value="cc">Call centre is off</option><option value="aman">Aman is off</option></select> <button type="button" id="leaveGo">Apply</button>' +
+        (L.off !== 'none' && L.waiting_with_absent_team ? ' <button type="button" id="leaveMove">Move ' + L.waiting_with_absent_team + ' not-yet-called lead(s) to ' + other + '</button>' : '') +
+        (L.off !== 'none' ? '<div class="warn">' + esc(L.message) + '</div>' : '');
+      el.appendChild(box);
+      var send = function (url, body, done) { fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || 'Failed'); return j; }); }).then(done).catch(function (e) { alert(e.message); }); };
+      document.getElementById('leaveGo').onclick = function () { send('/api/cc/team-leave', { off: document.getElementById('leaveSel').value }, function () { apBanner(); }); };
+      var mv = document.getElementById('leaveMove');
+      if (mv) mv.onclick = function () { if (!confirm('Move ' + L.waiting_with_absent_team + ' lead(s) that nobody has called yet from ' + L.name + ' to ' + other + '? Leads already called, callbacks and leads open right now stay where they are.')) return; send('/api/cc/team-leave/move-waiting', { confirm: true }, function (j) { alert('Moved ' + j.moved + ' lead(s) to ' + other); apBanner(); }); };
     }).catch(function () {});
   }
   apBeat(); apBanner(); setInterval(function () { apBeat(); apBanner(); }, 60000);
