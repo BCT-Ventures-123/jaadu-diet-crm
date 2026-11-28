@@ -66,6 +66,23 @@ test('follow-ups first: no fresh lead is shown in Ready now while a follow-up or
   assert.equal(q.blocked_fresh, 5); assert.equal(q.views.fresh.length, 5);                          // the Fresh button still shows them
 });
 
+test('daily limit: only today\'s share of fresh leads is released, picked by the month mix; the rest wait for later days', () => {
+  const fresh = [...many(1000, '2026-06'), ...many(1000, '2026-07'), ...many(1000, '2026-08'), ...many(1000, '2026-09'), ...many(1000, '2026-10')];
+  const q = rq.buildQueue(fresh, NOW);                                                   // default limit: 100 a day
+  assert.equal(q.counts.ready, 100); assert.equal(q.counts.fresh, 100); assert.equal(q.counts.all, 100);
+  const c = {}; q.views.ready.forEach(l => { c[l.acq_month] = (c[l.acq_month] || 0) + 1; }); assert.deepEqual(c, { '2026-06': 50, '2026-07': 25, '2026-08': 20, '2026-09': 5 });
+  assert.deepEqual(q.daily, { limit: 100, used_today: 0, released_now: 100, waiting_for_later_days: 4900, fresh_total: 5000 });
+});
+
+test('daily limit: first calls already made today use up the share; at the limit nothing fresh is shown; follow-ups are never limited', () => {
+  const fresh = many(500, '2026-06'), due = lead({ status: 'wfc', attempts: 1, next_due_at: H(-1) });
+  assert.equal(rq.buildQueue(fresh, NOW, rq.settings({}), { freshUsedToday: 30 }).counts.fresh, 70);
+  const none = rq.buildQueue(fresh, NOW, rq.settings({}), { freshUsedToday: 100 }); assert.equal(none.counts.ready, 0); assert.equal(none.counts.fresh, 0); assert.equal(none.daily.waiting_for_later_days, 500);
+  assert.equal(rq.buildQueue(fresh, NOW, rq.settings({}), { freshUsedToday: 250 }).counts.fresh, 0);                    // over the limit never goes negative
+  const withDue = rq.buildQueue([...fresh, due], NOW, rq.settings({}), { freshUsedToday: 100 }); assert.equal(withDue.counts.ready, 1);   // the follow-up still comes
+  assert.equal(rq.buildQueue(fresh, NOW, rq.settings({ REPEAT_DAILY_FRESH: '40' })).counts.fresh, 40);                  // the limit can be changed in Railway
+});
+
 test('with nothing due, Ready now is the fresh leads in mix order; a future follow-up does not block them', () => {
   const q = rq.buildQueue([...many(4, '2026-06'), lead({ status: 'wfc', attempts: 1, next_due_at: H(6) })], NOW);
   assert.equal(q.counts.ready, 4); assert.equal(q.blocked_fresh, 0); assert.ok(q.views.ready.every(l => l.why === 'fresh'));
