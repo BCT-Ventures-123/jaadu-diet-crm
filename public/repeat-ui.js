@@ -68,7 +68,9 @@
     var w = d.mix && d.mix.weights ? Object.keys(d.mix.weights).sort().map(function (m) { return monLabel(m) + ' ' + d.mix.weights[m] + '%'; }).join(' · ') : '';
     var warn = d.blocked_fresh ? '<div class="rp-warn">' + (c.callbacks + c.retry) + ' follow-up(s) are due. Finish them first: ' + d.blocked_fresh + ' fresh lead(s) wait so no lead is wasted. The Fresh button still shows them.</div>' : '';
     var rows = d.rows.length ? d.rows.map(function (l) { return card(l, d.dispositions); }).join('') : '<div class="rp-note">Nothing in this view.</div>';
-    call.innerHTML = '<div class="rp-chips">' + chips + '</div>' + warn + '<div class="rp-note">Showing ' + d.shown + ' of ' + d.total_in_view + '. Fresh leads follow the month mix (' + esc(w) + ').</div>' + rows;
+    var dy = d.daily || {}, today = '<b>' + (dy.used_today || 0) + '</b> first calls made today of <b>' + (dy.limit || 0) + '</b> fresh leads a day. ' + (dy.waiting_for_later_days ? '<b>' + dy.waiting_for_later_days.toLocaleString('en-IN') + '</b> more customers wait for later days (released day by day, never all at once). ' : '');
+    var left = (dy.limit || 0) - (dy.used_today || 0) <= 0 && !c.callbacks && !c.retry ? '<div class="rp-warn">Today\'s fresh leads are all called. More are released tomorrow.</div>' : '';
+    call.innerHTML = '<div class="rp-chips">' + chips + '</div>' + warn + left + '<div class="rp-note">' + today + 'Fresh leads follow the month mix (' + esc(w) + '). Showing ' + d.shown + ' of ' + d.total_in_view + ' in this view.</div>' + rows;
     var n = document.getElementById('rpReadyN'); if (n) n.textContent = c.ready || '';
     var cr = document.getElementById('countRepeat'); if (cr) cr.textContent = c.ready || 0;       // the number on the Repeat customers button
   }
@@ -120,7 +122,7 @@
     var q = R.queue || {};
     rep.innerHTML = '<div class="rp-chips">' + btns + '</div><div class="rp-note">Connected means the customer spoke to Aman (interested, P2P, WFC, call back, not interested or sale). Connectivity = connected calls ÷ all calls. Sales verified = the customer\'s phone has a real order in the CRM after the sale call.</div>' +
       '<table class="rp-tbl"><thead><tr>' + head.map(function (h) { return '<th>' + h + '</th>'; }).join('') + '</tr></thead><tbody>' + (days || '<tr><td colspan="14">No calls in these dates.</td></tr>') + '</tbody></table>' +
-      '<div class="rp-h">Follow-ups and leads right now</div><table class="rp-tbl"><tbody><tr><td>Follow-ups due now</td><td>' + (q.callbacks || 0) + '</td></tr><tr><td>Follow-ups overdue more than 24 hours</td><td>' + (R.followups_overdue_24h || 0) + '</td></tr><tr><td>Retries due (DNP, switched off, not reachable)</td><td>' + (q.retry || 0) + '</td></tr><tr><td>Fresh leads never called</td><td>' + (q.fresh || 0) + '</td></tr></tbody></table>' +
+      '<div class="rp-h">Follow-ups and leads right now</div><table class="rp-tbl"><tbody><tr><td>Follow-ups due now</td><td>' + (q.callbacks || 0) + '</td></tr><tr><td>Follow-ups overdue more than 24 hours</td><td>' + (R.followups_overdue_24h || 0) + '</td></tr><tr><td>Retries due (DNP, switched off, not reachable)</td><td>' + (q.retry || 0) + '</td></tr><tr><td>Fresh leads released today and not yet called (daily limit ' + ((R.daily || {}).limit || 0) + ', first calls made today ' + ((R.daily || {}).used_today || 0) + ')</td><td>' + (q.fresh || 0) + '</td></tr><tr><td>Fresh customers waiting for later days</td><td>' + ((R.daily || {}).waiting_for_later_days || 0) + '</td></tr></tbody></table>' +
       '<div class="rp-h">The customer pool by month of first purchase</div><table class="rp-tbl"><thead><tr><th>Month</th><th>Customers</th><th>Never called</th><th>Closed</th><th>Sales</th></tr></thead><tbody>' + pool + '</tbody></table>';
   }
   rep.addEventListener('click', function (e) { var b = e.target.closest('button[data-r]'); if (!b) return; Q.range = b.getAttribute('data-r'); loadReport(); });
