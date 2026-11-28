@@ -19,7 +19,8 @@
   css.textContent = '.rp-pills{display:flex;gap:8px;margin:0 0 14px;flex-wrap:wrap}.rp-pills button,.rp-chips button{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:999px;padding:8px 14px;font:600 13px Inter,sans-serif;cursor:pointer}' +
     '.rp-pills button.on,.rp-chips button.on{background:var(--green);color:#fff;border-color:var(--green)}.rp-chips{display:flex;gap:8px;margin:0 0 10px;flex-wrap:wrap}.rp-chips b{margin-left:6px}' +
     '.rp-note{font-size:13px;color:var(--muted);margin:6px 0 12px}.rp-warn{background:var(--yellow-dim);color:var(--yellow);border-radius:8px;padding:8px 12px;font-size:13px;margin:0 0 10px;font-weight:600}' +
-    '.rp-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin:0 0 10px;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,2fr);gap:12px}' +
+    '.rp-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin:0 0 10px;display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,300px);gap:12px 18px;align-items:center}' +
+    '.rp-sel{width:100%;border:1px solid var(--border);border-radius:10px;padding:12px 12px;background:var(--surface2);color:var(--text);font:600 14px Inter,sans-serif;cursor:pointer}.rp-sel:focus{outline:2px solid var(--green);outline-offset:1px}' +
     '.rp-card h4{margin:0 0 2px;font:700 15px Inter,sans-serif}.rp-ph a{font:700 18px Inter,sans-serif;color:var(--green);text-decoration:none}.rp-meta{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.5}' +
     '.rp-tag{display:inline-block;border-radius:6px;padding:2px 8px;font:600 11px Inter,sans-serif;background:var(--purple-dim);color:var(--purple);margin-right:4px}.rp-tag.due{background:var(--yellow-dim);color:var(--yellow)}' +
     '.rp-btns{display:flex;flex-wrap:wrap;gap:6px;align-content:flex-start}.rp-btns button{border:1px solid var(--border);background:var(--surface2);color:var(--text);border-radius:8px;padding:8px 10px;font:600 12px Inter,sans-serif;cursor:pointer}' +
@@ -36,7 +37,8 @@
   var old = document.createElement('div'); old.id = 'rpOld'; old.style.display = 'none';
   while (host.firstChild) old.appendChild(host.firstChild);
   var pills = document.createElement('div'); pills.className = 'rp-pills';
-  pills.innerHTML = '<button data-v="call" class="on">Repeat calling <b id="rpReadyN"></b></button><button data-v="old">Orders to confirm <b id="rpOldN"></b></button><button data-v="rep">Repeat report</button>';
+  // The older open repeat ORDERS to confirm are no longer on this page: they are called from Leads to call (server.js adds them to that list). The wrapped table stays hidden; its counter element is kept so the old loader has somewhere to write.
+  pills.innerHTML = '<button data-v="call" class="on">Repeat calling <b id="rpReadyN"></b></button><button data-v="rep">Repeat report</button><span id="rpOldN" style="display:none"></span>';
   var call = document.createElement('div'), rep = document.createElement('div'); rep.style.display = 'none';
   host.appendChild(pills); host.appendChild(call); host.appendChild(old); host.appendChild(rep);
   pills.addEventListener('click', function (e) { var b = e.target.closest('button[data-v]'); if (!b) return; Q.view = b.getAttribute('data-v'); show(); });
@@ -54,13 +56,21 @@
     if (l.why === 'followup_later' || l.why === 'retry_later') return '<span class="rp-tag">' + esc(s) + ', next ' + esc(when(l.next_due_at)) + '</span>';
     return '<span class="rp-tag">fresh</span>';
   }
+  // One dropdown per customer holds every result and the WhatsApp message. Choosing a result opens a small form (note, time, order number where needed).
+  var SHORT = { interested: 'Interested', p2p: 'P2P (promise to pay)', wfc: 'WFC (waiting for confirmation)', call_back: 'Call back', not_interested: 'Not interested', sale_done: 'Sale done', dnp: 'DNP (did not pick up)', sw_off: 'Switched off', not_reachable: 'Not reachable' };
+  var GROUPS = [['Follow up', ['interested', 'p2p', 'wfc', 'call_back']], ['Closed', ['not_interested', 'sale_done']], ['Not reached', ['dnp', 'sw_off', 'not_reachable']]];
+  function selectHtml(disp) {
+    var have = {}; disp.forEach(function (d) { have[d.key] = d; });
+    var o = '<option value="" selected disabled>Call result…</option>' + GROUPS.map(function (g) {
+      return '<optgroup label="' + g[0] + '">' + g[1].filter(function (k) { return have[k]; }).map(function (k) { return '<option value="' + k + '">' + esc(SHORT[k] || have[k].label) + '</option>'; }).join('') + '</optgroup>';
+    }).join('') + '<optgroup label="Message"><option value="wa">WhatsApp the customer</option></optgroup>';
+    return '<select class="rp-sel" aria-label="Call result">' + o + '</select>';
+  }
   function card(l, disp) {
     var first = String(l.name || '').trim().split(/\s+/)[0] || 'there';
-    var SHORT = { interested: 'Interested', p2p: 'P2P', wfc: 'WFC', call_back: 'Call back', not_interested: 'Not interested', sale_done: 'Sale done', dnp: 'DNP', sw_off: 'SW off', not_reachable: 'Not reachable' };
-    var b = disp.map(function (d) { return '<button type="button" data-d="' + d.key + '" title="' + esc(d.label) + '" class="' + (d.key === 'sale_done' ? 'go' : (d.key === 'not_interested' ? 'bad' : '')) + '">' + esc(SHORT[d.key] || d.label) + '</button>'; }).join('');
-    return '<div class="rp-card" data-id="' + l.id + '" data-name="' + esc(first) + '" data-phone="' + esc(l.phone10) + '"><div><h4>' + esc(l.name || 'Customer') + '</h4><div class="rp-ph"><a href="tel:' + esc(l.phone10) + '">' + esc(l.phone10) + '</a></div>' +
+    return '<div class="rp-card" data-id="' + l.id + '" data-name="' + esc(first) + '" data-phone="' + esc(l.phone10) + '"><div class="rp-main"><h4>' + esc(l.name || 'Customer') + '</h4><div class="rp-ph"><a href="tel:' + esc(l.phone10) + '">' + esc(l.phone10) + '</a></div>' +
       '<div class="rp-meta">' + whyTag(l) + '<span class="rp-tag">' + esc(monLabel(l.acq_month)) + '</span><br>Bought ' + (l.delivered_orders || 1) + ' time(s) · last order ' + esc(l.last_order_date || '—') + '<br>Calls so far: ' + (l.attempts || 0) + (l.last_call_at ? ' · last ' + esc(ago(l.last_call_at)) : '') + '</div></div>' +
-      '<div class="rp-btns">' + b + '<button type="button" data-d="wa" class="wa">WhatsApp</button></div>' + (l.notes ? '<div class="rp-last">' + esc(String(l.notes).split('\n').slice(0, 3).join('\n')) + '</div>' : '') + '</div>';
+      '<div class="rp-act">' + selectHtml(disp) + '</div>' + (l.notes ? '<div class="rp-last">' + esc(String(l.notes).split('\n').slice(0, 3).join('\n')) + '</div>' : '') + '</div>';
   }
   function draw() {
     var d = Q.data; if (!d) return;
@@ -77,10 +87,12 @@
   function load() { return get('/api/cc/repeat/queue?filter=' + Q.filter).then(function (d) { Q.data = d; draw(); }).catch(function (e) { call.innerHTML = '<div class="rp-warn">' + esc(e.message) + '</div>'; }); }
   call.addEventListener('click', function (e) {
     var f = e.target.closest('button[data-f]'); if (f) { Q.filter = f.getAttribute('data-f'); load(); return; }
-    var b = e.target.closest('button[data-d]'), cardEl = e.target.closest('.rp-card'); if (!b || !cardEl) return;
-    var id = cardEl.getAttribute('data-id'), key = b.getAttribute('data-d');
+  });
+  call.addEventListener('change', function (e) {
+    var sel = e.target.closest('select.rp-sel'), cardEl = e.target.closest('.rp-card'); if (!sel || !cardEl) return;
+    var id = cardEl.getAttribute('data-id'), key = sel.value; sel.selectedIndex = 0;       // back to "Call result…" so the same result can be picked again
     if (key === 'wa') { sendWa(id, cardEl); return; }
-    dialog(id, key, cardEl);
+    if (key) dialog(id, key, cardEl);
   });
   function sendWa(id, el) {
     var phone = el.getAttribute('data-phone'), text = WA_TEXT.replace('{name}', el.getAttribute('data-name'));
