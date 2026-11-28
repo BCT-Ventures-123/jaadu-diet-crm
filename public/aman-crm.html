@@ -647,8 +647,8 @@ async function loadRepeatQueue() {
   try {
     const r = await fetch(API + '/api/aman/repeat-queue');
     const data = await r.json();
-    document.getElementById('countRepeat').textContent = data.length;
-    document.getElementById('repeatInfo').textContent = data.length + ' repeat customers';
+    var oldN = document.getElementById('rpOldN'); if (oldN) oldN.textContent = data.length; else document.getElementById('countRepeat').textContent = data.length;       // with the repeat-calling page, the button number is its own ready count
+    document.getElementById('repeatInfo').textContent = data.length + ' open repeat orders to confirm';
     if (!data.length) {
       document.getElementById('repeatBody').innerHTML = emptyRow(10, '🔁', 'No repeat customers', 'Repeat queue is empty');
       return;
@@ -1019,6 +1019,7 @@ setInterval(loadAll, 30000);
 <script src="/report-ui.js"></script>
 <script src="/funnel-ui.js"></script>
 <script src="/channels-ui.js"></script>
+<script src="/repeat-ui.js"></script>
 <script src="/scoreboard-ui.js"></script>
 <script>
 (function () {
