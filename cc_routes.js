@@ -936,6 +936,39 @@ module.exports = function mountCcRoutes(app, deps) {
     } catch (err) { sendError(res, err); }
   });
 
+  // ===================== REPEAT-CUSTOMER CALLING (owner 2026-11-27; rules lib/repeatQueue.js, tables lib/repeatDb.js) =====================
+  // Aman and the admin call customers who bought before and have not bought again. Its own tables: nothing here touches orders or the COD confirmation numbers.
+  const repeatDb = require('./lib/repeatDb'), repeatRules = require('./lib/repeatQueue');
+  app.post('/api/cc/repeat/import', inHouseOnly, async (req, res) => {
+    try {
+      if (req.agent.role !== 'admin') throw new HttpError(403, 'Only the admin can import customers');
+      const rows = req.body && req.body.rows;
+      if (!Array.isArray(rows) || !rows.length) throw new HttpError(400, 'No rows');
+      if (rows.length > 1000) throw new HttpError(400, 'Send at most 1000 customers at a time');
+      res.json(await repeatDb.importRows(db, rows));
+    } catch (err) { sendError(res, err); }
+  });
+  app.get('/api/cc/repeat/queue', inHouseOnly, async (req, res) => {
+    try { res.json({ dispositions: repeatRules.DISPOSITIONS, ...(await repeatDb.queue(db, String(req.query.filter || 'ready'))) }); } catch (err) { sendError(res, err); }
+  });
+  app.post('/api/cc/repeat/:id/call', inHouseOnly, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10); if (!id) throw new HttpError(400, 'Invalid customer');
+      res.json(await repeatDb.logCall(db, id, req.body || {}, req.agent.display_name));
+    } catch (err) { sendError(res, err.status && !(err instanceof HttpError) ? new HttpError(err.status, err.message) : err); }       // the library's own messages (for example "Enter the order number for the sale") reach the screen
+  });
+  // The WhatsApp button: opens the customer's chat on the company number with the text below, and records that it was sent so the same customer is not messaged twice by mistake.
+  app.post('/api/cc/repeat/:id/whatsapp', inHouseOnly, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10); if (!id) throw new HttpError(400, 'Invalid customer');
+      const c = await repeatDb.markWhatsApp(db, id); if (!c) throw new HttpError(404, 'Customer not found');
+      res.json({ ok: true, phone: c.phone10 });
+    } catch (err) { sendError(res, err); }
+  });
+  app.get('/api/cc/repeat/report', inHouseOnly, async (req, res) => {
+    try { const r = parseRange(req.query); res.json(await repeatDb.report(db, r.from, r.to)); } catch (err) { sendError(res, err); }
+  });
+
   app.post('/api/cc/leads/reassign', inHouseOnly, async (req, res) => {
     try {
       const ids = idList(req.body?.ids);
