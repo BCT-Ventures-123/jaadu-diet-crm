@@ -340,9 +340,19 @@ function legacyRouteOrder(shopifyOrderId) {
 }
 
 let presenceCache = { at: 0, value: null };
+// A team on leave (lib/teamLeave.js): while the call centre or Aman is off for the day, every new order goes to the other team, whatever the split or autopilot says. Cached for 30 seconds; a failed read means nobody is off.
+let leaveCache = { at: 0, day: '', off: 'none' };
+async function teamLeaveToday() {
+  const tl = require('./lib/teamLeave'), day = tl.istDateKey();
+  if (leaveCache.day === day && Date.now() - leaveCache.at < 30000) return leaveCache.off;
+  const t = await tl.today(db); leaveCache = { at: Date.now(), day, off: t.off };
+  return t.off;
+}
 async function routeOrder(shopifyOrderId) {
   const apLib = require('./lib/autopilot');
   const s = apLib.settings();
+  { const off = await teamLeaveToday(), tl = require('./lib/teamLeave'), to = tl.receiver(off);
+    if (to) return { assigned_to: to, route_percent: ((shopifyOrderId % 10000) % 100) + 1, leave: off, reason: tl.label(off) }; }
   if (s.mode === 'off') return legacyRouteOrder(shopifyOrderId);
   const pct = ((shopifyOrderId % 10000) % 100) + 1;
   if (s.mode === 'on') {
@@ -678,7 +688,8 @@ app.post('/webhook/shopify/order-created', async (req, res) => {
       `SELECT 1 AS found FROM orders_master WHERE customer_phone = $1 AND COALESCE(order_status, 'new') <> 'cancelled' LIMIT 1`,
       [phone]
     );
-    const forceInHouse = (riskResult?.score || 0) >= 40 || !!priorOrder || !!dupResult?.is_duplicate;
+    // Normally risky, repeat and duplicate orders go to Aman. On a day Aman is on leave the owner's rule (100 percent to the team that is working) wins, so they go to the call centre.
+    const forceInHouse = !routing.leave && ((riskResult?.score || 0) >= 40 || !!priorOrder || !!dupResult?.is_duplicate);
 
     const inserted = await dbOne(`
       INSERT INTO orders_master (

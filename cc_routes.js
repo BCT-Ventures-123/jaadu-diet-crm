@@ -886,6 +886,56 @@ module.exports = function mountCcRoutes(app, deps) {
     return ids;
   };
 
+  // ===================== TEAM ON LEAVE (owner 2026-11-28; rules in lib/teamLeave.js) =====================
+  // When the call centre (Saturday by default) or Aman (Sunday by default) is not working, 100 percent of the day's NEW leads go to the other team. Aman or the admin can change any day here.
+  // Leads nobody has called yet that are already with the absent team can be moved over with one extra button (never automatic: the receiving team's capacity is a person's call).
+  const waitingFor = (team) => db(
+    `SELECT o.id FROM orders_master o
+     WHERE o.assigned_to = $1 AND o.confirmation_status = 'pending' AND o.order_status = 'new' AND COALESCE(o.dnc,FALSE) = FALSE AND o.callback_at IS NULL
+       AND COALESCE(o.shopify_created_at, o.created_at) >= NOW() - INTERVAL '10 days'
+       AND UPPER(COALESCE(o.payment_method,'')) = 'COD' AND NOT ${TEST_NAME_SQL} AND o.total_price >= $2
+       AND NOT EXISTS (SELECT 1 FROM lead_call_log g WHERE g.order_id = o.id)
+       AND (o.lead_locked_by IS NULL OR o.lead_locked_at < NOW() - ($3 || ' minutes')::interval)`, [team, productsLib.MIN_PRICE, String(CONFIG.LEAD_LOCK_MINUTES)]);
+  async function teamLeaveState() {
+    const tl = require('./lib/teamLeave'), t = await tl.today(db);
+    const absent = t.off === 'cc' ? 'CC' : t.off === 'aman' ? 'InHouse' : null;
+    return { ...t, name: t.off === 'none' ? '' : tl.TEAM_NAME[t.off], message: tl.label(t.off), waiting_with_absent_team: absent ? (await waitingFor(absent)).length : 0, enabled: tl.settings().on };
+  }
+  app.get('/api/cc/team-leave', inHouseOnly, async (req, res) => {
+    try { res.json(await teamLeaveState()); } catch (err) { sendError(res, err); }
+  });
+  // off: 'cc' | 'aman' | 'none' (nobody off today) | 'default' (back to the weekly default). Only today can be changed.
+  app.post('/api/cc/team-leave', inHouseOnly, async (req, res) => {
+    try {
+      const tl = require('./lib/teamLeave'), off = String(req.body && req.body.off || '');
+      if (!['cc', 'aman', 'none', 'default'].includes(off)) throw new HttpError(400, 'Choose the call centre, Aman, nobody, or the weekly default');
+      await tl.ensureTables(db);
+      await tl.setOverride(db, tl.istDateKey(), off, req.agent.display_name);
+      console.log(`[TeamLeave] ${req.agent.display_name} set today to: ${off}`);
+      res.json(await teamLeaveState());
+    } catch (err) { sendError(res, err); }
+  });
+  // Move the not-yet-called leads of the team that is off to the team that is working. Needs confirm: true. Leads someone has open right now, callbacks and anything already called stay where they are.
+  app.post('/api/cc/team-leave/move-waiting', inHouseOnly, async (req, res) => {
+    try {
+      const st = await teamLeaveState();
+      if (st.off === 'none') throw new HttpError(400, 'Nobody is marked off today');
+      const from = st.off === 'cc' ? 'CC' : 'InHouse', to = st.off === 'cc' ? 'InHouse' : 'CC';
+      const ids = (await waitingFor(from)).map(r => r.id);
+      if (!(req.body && req.body.confirm === true)) return res.json({ preview: true, would_move: ids.length, from, to });
+      let moved = [];
+      for (let i = 0; i < ids.length; i += 500) {
+        moved = moved.concat(await db(
+          `UPDATE orders_master SET assigned_to = $2, assigned_agent = NULL, lead_locked_by = NULL, lead_locked_at = NULL, updated_at = NOW()
+           WHERE id = ANY($1) AND confirmation_status = 'pending' AND assigned_to = $3 RETURNING id`, [ids.slice(i, i + 500), to, from]));
+      }
+      if (moved.length) await db(`INSERT INTO order_status_events (order_id, event_type, old_value, new_value, actor, notes)
+                                  SELECT unnest($1::uuid[]), 'reassigned', $2, $3, $4, 'Team on leave: not-yet-called lead moved'`, [moved.map(m => m.id), from, to, req.agent.display_name]);
+      console.log(`[TeamLeave] ${req.agent.display_name} moved ${moved.length} waiting lead(s) from ${from} to ${to}`);
+      res.json({ moved: moved.length, from, to, state: await teamLeaveState() });
+    } catch (err) { sendError(res, err); }
+  });
+
   app.post('/api/cc/leads/reassign', inHouseOnly, async (req, res) => {
     try {
       const ids = idList(req.body?.ids);
