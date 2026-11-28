@@ -890,6 +890,18 @@ app.get('/api/aman/fresh-leads', async (req, res) => {
        WHERE COALESCE(o.dnc, FALSE) = FALSE
          AND COALESCE(o.shopify_created_at, o.created_at) >= $1::timestamptz
          AND NOT (COALESCE(o.lead_locked_by, '') IN ('IVR', 'WHATSAPP') AND COALESCE(o.lead_locked_at > NOW() - INTERVAL '15 minutes', FALSE))`, [require('./lib/config').CALLING_STARTED_ON + 'T00:00:00+05:30']);   // one owner per lead: what the IVR holds is not shown to Aman
+    // Open repeat ORDERS (same phone as an earlier order) are COD orders waiting for confirmation, so they are called from this list like any other order (owner 2026-11-28).
+    // The Repeat customers page is only for calling the customer list. A failure here leaves the list as it was.
+    try {
+      const have = new Set(rows.map(r => String(r.id)));
+      const rep = await db(
+        `SELECT v.*, o.line_items, o.shipping_address1, o.shipping_address2, o.address_fixed, o.shopify_created_at, o.callback_at, o.callback_note, o.risk_score AS o_risk,
+                GREATEST(0, EXTRACT(EPOCH FROM (NOW() - COALESCE(o.shopify_created_at, o.created_at))) / 60)::int AS o_age, 'InHouse' AS assigned_to
+         FROM v_aman_repeat_queue v JOIN orders_master o ON o.id = v.id
+         WHERE COALESCE(o.dnc, FALSE) = FALSE
+           AND NOT (COALESCE(o.lead_locked_by, '') IN ('IVR', 'WHATSAPP') AND COALESCE(o.lead_locked_at > NOW() - INTERVAL '15 minutes', FALSE))`);
+      rep.forEach(r => { if (!have.has(String(r.id))) rows.push({ ...r, risk_score: r.risk_score != null ? r.risk_score : (r.o_risk || 0), age_minutes: r.age_minutes != null ? r.age_minutes : r.o_age, is_repeat_order: true }); });
+    } catch (e) { console.error('[Aman] repeat orders not added to Leads to call:', e.message); }
     // Smart queue: best lead to call next first, with the reason (lib/queue.js).
     const { dnpStatus } = require('./lib/dnp'), { callbackBadge } = require('./lib/callback'), queueLib = require('./lib/queue');
     const tries = rows.length ? await db(`SELECT order_id, created_at FROM lead_call_log WHERE order_id = ANY($1) AND disposition = 'dnp'`, [rows.map(r => r.id)]) : [];
